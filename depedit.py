@@ -13,7 +13,7 @@ import copy
 import sys
 from collections import defaultdict
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 class ParsedToken:
 	def __init__(self, id, text, lemma, pos, morph, head, func, child_funcs):
@@ -49,8 +49,6 @@ class Transformation:
 			sys.stderr.write(message)
 			sys.exit()
 		self.definitions = instructions[0]
-		instructions[1] = \
-			re.sub(r'(#[0-9]+)(>|\.([0-9]+(,[0-9]+)?)?)(#[0-9]+)(>|\.([0-9]+(,[0-9]+)?)?)', '\1\2\5;\5\6', instructions[1])
 		self.relations = instructions[1]
 		self.actions = instructions[2]
 		self.line = line
@@ -73,7 +71,7 @@ class Transformation:
 			else:
 				criteria = relation.split(";")
 				for criterion in criteria:
-					if not re.match('#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+',criterion):
+					if not re.match('#[0-9]+(>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+',criterion):
 						report += "Column 2 relation setting invalid criterion: " + criterion
 		for action in self.actions:
 			commands = action.split(";")
