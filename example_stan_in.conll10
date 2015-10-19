@@ -1,0 +1,9 @@
+1	Wikinews	_	NP	NP	_	2	nsubj	_	_
+2	interviews	_	VVZ	VVZ	_	0	root	_	_
+3	President	_	NN	NN	_	2	dobj	_	_
+4	of	_	IN	IN	_	3	prep	_	_
+5	the	_	DT	DT	_	7	det	_	_
+6	International	_	NP	NP	_	7	amod	_	_
+7	Brotherhood	_	NP	NP	_	4	pobj	_	_
+8	of	_	IN	IN	_	7	prep	_	_
+9	Magicians	_	NPS	NPS	_	8	pobj	_	_
