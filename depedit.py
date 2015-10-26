@@ -13,7 +13,7 @@ import copy
 import sys
 from collections import defaultdict
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 class ParsedToken:
 	def __init__(self, id, text, lemma, pos, morph, head, func, child_funcs):
@@ -27,8 +27,8 @@ class ParsedToken:
 		self.child_funcs = child_funcs
 
 class Transformation:
-	@staticmethod
-	def parse_transformation(transformation_text):
+
+	def parse_transformation(self,transformation_text):
 		if transformation_text.count("\t") < 2:
 			return None
 		else:
@@ -36,10 +36,20 @@ class Transformation:
 			definition_string = split_trans[0]
 			relation_string = split_trans[1]
 			action_string = split_trans[2]
+			relation_string = self.normalize_shorthand(relation_string)
+			action_string = self.normalize_shorthand(action_string)
 			definitions = definition_string.split(";")
 			relations = relation_string.split(";")
 			actions = action_string.split(";")
 			return [definitions,relations,actions]
+
+	@staticmethod
+	def normalize_shorthand(criterion_string):
+		temp = ""
+		while temp != criterion_string:
+			temp = criterion_string
+			criterion_string = re.sub(r'(#[0-9]+)(>|\.(?:[0-9]+(?:,[0-9]+)?)?)(#[0-9]+)(>|\.(?:[0-9]+(?:,[0-9]+)?)?)', r'\1\2\3;\3\4', criterion_string)
+		return criterion_string
 
 	def __init__(self, transformation_text, line):
 		instructions = self.parse_transformation(transformation_text)
@@ -71,8 +81,9 @@ class Transformation:
 			else:
 				criteria = relation.split(";")
 				for criterion in criteria:
-					if not re.match('#[0-9]+(>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+',criterion):
-						report += "Column 2 relation setting invalid criterion: " + criterion
+					criterion = criterion.strip()
+					if not re.match(r"\#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)\#[0-9]+)+",criterion):
+						report += "Column 2 relation setting invalid criterion: " + criterion + ". "
 		for action in self.actions:
 			commands = action.split(";")
 			for command in commands:
