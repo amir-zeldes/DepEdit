@@ -13,7 +13,7 @@ import copy
 import sys
 from collections import defaultdict
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 class ParsedToken:
 	def __init__(self, id, text, lemma, pos, morph, head, func, child_funcs):
@@ -189,7 +189,10 @@ def test_relation(node1,node2,operator):
 		m = re.match(r'\.([0-9]+)(,[0-9]+)?',operator)
 		if len(m.groups()) > 1:
 			min_dist = int(m.group(1))
-			max_dist = int(m.group(2).replace(",",""))
+			if not m.group(2) is None:
+				max_dist = int(m.group(2).replace(",",""))
+			else:
+				max_dist = min_dist
 			if int(node2.id) - int(node1.id) >= min_dist and int(node2.id) - int(node1.id) <= max_dist:
 				return True
 			else:
@@ -268,7 +271,7 @@ def execute_action(result_sets,action_list):
 
 def print_tokens(tokens):
 	for tok in tokens:
-		print str(int(tok.id)-tokoffset)+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.pos+"\t_"+"\t"+str(int(tok.head)-tokoffset)+"\t"+tok.func+"\t_\t_"
+		print str(int(tok.id)-tokoffset)+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.pos+"\t" + tok.morph + "\t"+str(int(tok.head)-tokoffset)+"\t"+tok.func+"\t_\t_"
 	print ""
 
 depedit_version = "DepEdit V" + __version__
