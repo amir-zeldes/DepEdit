@@ -13,11 +13,12 @@ import copy
 import sys
 from collections import defaultdict
 
-__version__ = "1.0.3"
+__version__ = "1.1.0"
+
 
 class ParsedToken:
-	def __init__(self, id, text, lemma, pos, morph, head, func, child_funcs):
-		self.id = id
+	def __init__(self, tok_id, text, lemma, pos, morph, head, func, child_funcs):
+		self.id = tok_id
 		self.text = text
 		self.pos = pos
 		self.lemma = lemma
@@ -26,9 +27,10 @@ class ParsedToken:
 		self.func = func
 		self.child_funcs = child_funcs
 
+
 class Transformation:
 
-	def parse_transformation(self,transformation_text):
+	def parse_transformation(self, transformation_text):
 		if transformation_text.count("\t") < 2:
 			return None
 		else:
@@ -41,7 +43,7 @@ class Transformation:
 			definitions = definition_string.split(";")
 			relations = relation_string.split(";")
 			actions = action_string.split(";")
-			return [definitions,relations,actions]
+			return [definitions, relations,actions]
 
 	@staticmethod
 	def normalize_shorthand(criterion_string):
@@ -74,7 +76,7 @@ class Transformation:
 						report+= "Invalid node definition in column 1: " + criterion
 		for relation in self.relations:
 			if relation == "none" and len(self.relations) == 1:
-				if len(self.definitions)>1:
+				if len(self.definitions) > 1:
 					report += "Column 2 setting 'none' invalid with more than one definition in column 1"
 			elif relation == "none":
 				report += "Setting 'none' invalid in column 2 when multiple relations are defined"
@@ -82,7 +84,7 @@ class Transformation:
 				criteria = relation.split(";")
 				for criterion in criteria:
 					criterion = criterion.strip()
-					if not re.match(r"\#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)\#[0-9]+)+",criterion):
+					if not re.match(r"#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+",criterion):
 						report += "Column 2 relation setting invalid criterion: " + criterion + ". "
 		for action in self.actions:
 			commands = action.split(";")
@@ -92,7 +94,7 @@ class Transformation:
 		return report
 
 
-def process_sentence(conll_tokens,tokoffset,transformations):
+def process_sentence(conll_tokens, tokoffset, transformations):
 	for transformation in transformations:
 		node_matches = defaultdict(list)
 		for def_index, def_text in enumerate(transformation.definitions):
@@ -101,34 +103,34 @@ def process_sentence(conll_tokens,tokoffset,transformations):
 					node_matches[def_index+1].append(token)
 		result_sets = []
 		for relation in transformation.relations:
-			found = matches_relation(node_matches,relation,result_sets)
+			found = matches_relation(node_matches, relation, result_sets)
 			if not found:
 				result_sets = []
 		result_sets = merge_sets(result_sets,len(transformation.definitions))
 		if len(result_sets) > 0:
 			for action in transformation.actions:
-				execute_action(result_sets,action)
-	print_tokens(conll_tokens[tokoffset+1:])
+				execute_action(result_sets, action)
+	return serialize_output_tree(conll_tokens[tokoffset + 1:], tokoffset)
 
 
 def matches_definition(token,def_text):
 	defs = def_text.split("&")
 	for def_item in defs:
 		criterion = def_item.split("=")[0]
-		def_value = "^("+def_item.split("=")[1][1:-1]+")$"
+		def_value = "^(" + def_item.split("=")[1][1:-1] + ")$"
 		tok_value = getattr(token,criterion)
 		if not re.match(def_value,tok_value):
 			return False
 	return True
 
 
-def matches_relation(node_matches,relation,result_sets):
+def matches_relation(node_matches, relation, result_sets):
 	if len(relation) == 0:
 		return
 
 	elif "." in relation:
-		if re.match(r'.*\.[0-9]',relation):
-			m = re.match(r'.*\.[0-9]*,?[0-9]*#',relation)
+		if re.match(r'.*\.[0-9]', relation):
+			m = re.match(r'.*\.[0-9]*,?[0-9]*#', relation)
 			operator = m.group()
 			operator = operator[operator.find("."):operator.rfind("#")]
 		else:
@@ -139,10 +141,10 @@ def matches_relation(node_matches,relation,result_sets):
 	matches = defaultdict(list)
 
 	hits=0
-	if relation=="none": # Unary operation on one node
+	if relation == "none": # Unary operation on one node
 		node1 = 1
 		for tok1 in node_matches[node1]:
-			hits+=1
+			hits += 1
 			result = {}
 			matches[node1].append(tok1)
 			result[node1] = tok1
@@ -151,12 +153,12 @@ def matches_relation(node_matches,relation,result_sets):
 		node1 = relation.split(operator)[0]
 		node2 = relation.split(operator)[1]
 
-		node1=int(node1.replace("#",""))
-		node2=int(node2.replace("#",""))
+		node1=int(node1.replace("#", ""))
+		node2=int(node2.replace("#", ""))
 		for tok1 in node_matches[node1]:
 			for tok2 in node_matches[node2]:
-				if test_relation(tok1,tok2,operator):
-					result_sets.append({node1:tok1,node2:tok2})
+				if test_relation(tok1, tok2, operator):
+					result_sets.append({node1: tok1, node2: tok2})
 					matches[node1].append(tok1)
 					matches[node2].append(tok2)
 					hits += 1
@@ -169,13 +171,13 @@ def matches_relation(node_matches,relation,result_sets):
 			for token in tokens_to_remove:
 				node_matches[option].remove(token)
 
-	if hits == 0: # No solutions found for this relation
+	if hits == 0:  # No solutions found for this relation
 		return False
 	else:
 		return True
 
 def test_relation(node1,node2,operator):
-	if operator ==".":
+	if operator == ".":
 		if int(node2.id) == int(node1.id)+1:
 			return True
 		else:
@@ -193,7 +195,7 @@ def test_relation(node1,node2,operator):
 				max_dist = int(m.group(2).replace(",",""))
 			else:
 				max_dist = min_dist
-			if int(node2.id) - int(node1.id) >= min_dist and int(node2.id) - int(node1.id) <= max_dist:
+			if max_dist >= int(node2.id) - int(node1.id) >= min_dist:
 				return True
 			else:
 				return False
@@ -217,7 +219,6 @@ def merge_sets(sets,node_count):
 		for bin in copy.copy(bins):
 			if bins_compatible(new_set,bin):
 				candidate = merge_bins(new_set,bin)
-				#if candidate not in bin:
 				bins.append(candidate)
 		bins.append(new_set)
 
@@ -228,7 +229,7 @@ def merge_sets(sets,node_count):
 	return solutions
 
 
-def bins_compatible(bin1,bin2):
+def bins_compatible(bin1, bin2):
 	overlap = False
 	non_overlap = False
 	for key in bin1:
@@ -242,93 +243,103 @@ def bins_compatible(bin1,bin2):
 	else:
 		return False
 
-def merge_bins(bin1,bin2):
+def merge_bins(bin1, bin2):
 	for key in bin1:
 		if key not in bin2:
 			bin2[key]= bin1[key]
 			return bin2
 
 
-def execute_action(result_sets,action_list):
+def execute_action(result_sets, action_list):
 	actions = action_list.split(";")
 	for result in result_sets:
 		if len(result) > 0:
 			for action in actions:
-				if ":" in action: # Unary node instruction
+				if ":" in action:  # Unary node instruction
 					node_position = int(action[1:action.find(":")])
 					property = action[action.find(":")+1:action.find("=")]
 					value = action[action.find("=")+1:].strip()
 					setattr(result[node_position],property,value)
-				else: # Binary instruction
-					if ">" in action: # Head relation
+				else:  # Binary instruction
+					if ">" in action:  # Head relation
 						operator = ">"
-						node1 = int(action.split(operator)[0].replace("#",""))
-						node2 = int(action.split(operator)[1].replace("#",""))
+						node1 = int(action.split(operator)[0].replace("#", ""))
+						node2 = int(action.split(operator)[1].replace("#", ""))
 						tok1 = result[node1]
 						tok2 = result[node2]
 						tok2.head = tok1.id
 
 
-def print_tokens(tokens):
+def serialize_output_tree(tokens, tokoffset):
+	output_tree = ""
 	for tok in tokens:
-		print str(int(tok.id)-tokoffset)+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.pos+"\t" + tok.morph + "\t"+str(int(tok.head)-tokoffset)+"\t"+tok.func+"\t_\t_"
-	print ""
+		output_tree += str(int(tok.id)-tokoffset)+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.pos+"\t"+tok.morph+\
+						"\t"+str(int(tok.head)-tokoffset)+"\t"+tok.func+"\t_\t_\n"
+	output_tree += "\n"
+	return output_tree
 
-depedit_version = "DepEdit V" + __version__
-parser = argparse.ArgumentParser()
-parser.add_argument('-c', '--config', action="store", dest="config", default="config.ini", help="Configuration file defining transformation")
-parser.add_argument('--version', action='version', version=depedit_version)
-parser.add_argument('file',action="store",help="Input file name to process")
-options = parser.parse_args()
 
-infile = open(options.file)
-config_file = open(options.config)
+def run_depedit(infile, config_file):
+	children = defaultdict(list)
+	descendents = {}
+	child_funcs = defaultdict(list)
+	conll_tokens = []
+	tokoffset = 0
+	sentlength = 0
 
-children = defaultdict(list)
-descendents = {}
-child_funcs = defaultdict(list)
-conll_tokens = []
-tokoffset = 0
-sentlength = 0
+	transformations = []
+	line_num = 0
+	for instruction in config_file:
+		line_num += 1
+		if len(instruction)>0 and not instruction.startswith(";") and not instruction.startswith("#") and not instruction.strip() =="":
+			transformations.append(Transformation(instruction, line_num))
 
-transformations = []
-line_num = 0
-for instruction in config_file:
-	line_num += 1
-	if len(instruction)>0 and not instruction.startswith(";") and not instruction.startswith("#") and not instruction.strip() =="":
-		transformations.append(Transformation(instruction,line_num))
+	report = ""
+	for transformation in transformations:
+		trans_report = transformation.validate()
+		if trans_report != "":
+			report += "On line " + str(transformation.line) + ": " + trans_report +"\n"
+	if len(report) > 0:
+		report = "Depedit says: error in configuration file\n" + report
+		sys.stderr.write(report)
+		sys.exit()
 
-report = ""
-for transformation in transformations:
-	trans_report = transformation.validate()
-	if trans_report != "":
-		report += "On line " + str(transformation.line) + ": " + trans_report +"\n"
-if len(report) > 0:
-	report = "Depedit says: error in configuration file\n" + report
-	sys.stderr.write(report)
-	sys.exit()
+	conll_tokens.append(0)
+	my_output = ""
 
-conll_tokens.append(0)
+	for myline in infile:
+		if myline.find("\t") > 0:  # Only process lines that contain tabs (i.e. conll tokens)
+			cols = myline.split("\t")
+			conll_tokens.append(ParsedToken(str(int(cols[0]) + tokoffset),cols[1],cols[2],cols[3],cols[5],str(int(cols[6]) + tokoffset),cols[7].strip(),[]))
+			sentlength += 1
+			children[str(int(cols[6]) + tokoffset)].append(str(int(cols[0]) + tokoffset))
+			child_funcs[(int(cols[6]) + tokoffset)].append(cols[7])
+		elif sentlength > 0:
+			# TODO: Add list of all funcs dependent on this token to its child_funcs as a possible further condition
+			#for id in child_funcs:
+			#	for func in child_funcs[id]:
+			#		if not func in conll_tokens[id].child_funcs:
+			#			conll_tokens[id].child_funcs.append(func)
+			my_output += process_sentence(conll_tokens,tokoffset,transformations)
+			if sentlength > 0:
+				tokoffset += sentlength
 
-for myline in infile:
-	if myline.find("\t") > 0:  # Only process lines that contain tabs (i.e. conll tokens)
-		cols = myline.split("\t")
-		conll_tokens.append(ParsedToken(str(int(cols[0]) + tokoffset),cols[1],cols[2],cols[3],cols[5],str(int(cols[6]) + tokoffset),cols[7].strip(),[]))
-		sentlength += 1
-		children[str(int(cols[6]) + tokoffset)].append(str(int(cols[0]) + tokoffset))
-		child_funcs[(int(cols[6]) + tokoffset)].append(cols[7])
-	elif sentlength > 0:
-		# TODO: Add list of all funcs dependent on this token to its child_funcs as a possible further condition
-		#for id in child_funcs:
-		#	for func in child_funcs[id]:
-		#		if not func in conll_tokens[id].child_funcs:
-		#			conll_tokens[id].child_funcs.append(func)
-		process_sentence(conll_tokens,tokoffset,transformations)
-		if sentlength > 0:
-			tokoffset += sentlength
+			sentlength = 0
 
-		sentlength = 0
+	if sentlength > 0:  # Leftover sentence did not have trailing newline
+		my_output += process_sentence(conll_tokens,tokoffset,transformations)
 
-if sentlength > 0:  # Leftover sentence did not have trailing newline
-	process_sentence(conll_tokens,tokoffset,transformations)
+	return my_output
 
+if __name__ == "__main__":
+	depedit_version = "DepEdit V" + __version__
+	parser = argparse.ArgumentParser()
+	parser.add_argument('-c', '--config', action="store", dest="config", default="config.ini", help="Configuration file defining transformation")
+	parser.add_argument('--version', action='version', version=depedit_version)
+	parser.add_argument('file',action="store",help="Input file name to process")
+	options = parser.parse_args()
+
+	infile = open(options.file)
+	config_file = open(options.config)
+	output_trees = run_depedit(infile, config_file)
+	print output_trees
