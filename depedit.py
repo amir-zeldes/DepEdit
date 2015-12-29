@@ -13,7 +13,7 @@ import copy
 import sys
 from collections import defaultdict
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 
 class ParsedToken:
@@ -72,7 +72,7 @@ class Transformation:
 			for node in nodes:
 				criteria = node.split("&")
 				for criterion in criteria:
-					if not re.match("(text|pos|lemma|morph|func|head)=/[^/=]*/",criterion):
+					if not re.match("(text|pos|lemma|morph|func|head)!?=/[^/=]*/",criterion):
 						report+= "Invalid node definition in column 1: " + criterion
 		for relation in self.relations:
 			if relation == "none" and len(self.relations) == 1:
@@ -117,10 +117,19 @@ def matches_definition(token,def_text):
 	defs = def_text.split("&")
 	for def_item in defs:
 		criterion = def_item.split("=")[0]
+		if criterion[-1] == "!":
+			negative_criterion = True
+			criterion = criterion[:-1]
+		else:
+			negative_criterion = False
 		def_value = "^(" + def_item.split("=")[1][1:-1] + ")$"
 		tok_value = getattr(token,criterion)
 		if not re.match(def_value,tok_value):
-			return False
+			if not negative_criterion:
+				return False
+		else:
+			if negative_criterion:
+				return False
 	return True
 
 
