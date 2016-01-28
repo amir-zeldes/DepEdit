@@ -13,7 +13,7 @@ from copy import copy, deepcopy
 import sys
 from collections import defaultdict
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 
 
 class ParsedToken:
@@ -257,7 +257,7 @@ def merge_sets(sets, node_count, rel_count):
 		bins.append(copy(new_set))
 
 	for my_bin in bins:
-		if len(my_bin) == node_count + 1:
+		if len(my_bin) == node_count + 2:
 			solutions.append(my_bin)
 
 	merged_bins = []
