@@ -15,7 +15,7 @@ from copy import copy, deepcopy
 import sys
 from collections import defaultdict
 
-__version__ = "1.5.0"
+__version__ = "1.5.1"
 
 def escape(string,symbol_to_mask,border_marker):
 	inside = False
@@ -547,22 +547,26 @@ class DepEdit():
 							if tok1 != tok2:
 								tok2.head = tok1.id
 
-	@staticmethod
-	def serialize_output_tree(tokens, tokoffset):
+	def serialize_output_tree(self,tokens, tokoffset):
 		output_tree = ""
 		for tok in tokens:
 			if tok.head == "0":
 				tok_head_string = "0"
 			else:
 				tok_head_string = str(int(tok.head)-tokoffset)
-			output_tree += str(int(tok.id)-tokoffset)+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.cpos+"\t"+tok.morph+\
-							"\t"+tok_head_string+"\t"+tok.func+"\t"+tok.head2+"\t"+tok.func2+"\n"
+			if self.input_mode == "8col":
+				output_tree += str(int(tok.id)-tokoffset)+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.cpos+"\t"+tok.morph+\
+								"\t"+tok_head_string+"\t"+tok.func+"\n"
+			else:
+				output_tree += str(int(tok.id)-tokoffset)+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.cpos+"\t"+tok.morph+\
+								"\t"+tok_head_string+"\t"+tok.func+"\t"+tok.head2+"\t"+tok.func2+"\n"
 		return output_tree
 
 	def run_depedit(self, infile):
 		children = defaultdict(list)
 		child_funcs = defaultdict(list)
 		conll_tokens = []
+		self.input_mode = "10col"
 		tokoffset = 0
 		sentlength = 0
 
@@ -584,8 +588,12 @@ class DepEdit():
 			elif myline.find("\t") > 0:  # Only process lines that contain tabs (i.e. conll tokens)
 				sentence_string += myline
 				cols = myline.split("\t")
+				if len(cols) > 8:
 				# Collect token from line; note that head2 is parsed as a string, which is often "_" for monoplanar trees
-				conll_tokens.append(ParsedToken(str(int(cols[0]) + tokoffset),cols[1],cols[2],cols[3],cols[4],cols[5],str(int(cols[6]) + tokoffset),cols[7].strip(),cols[8],cols[9].strip(),cols[0],[]))
+					conll_tokens.append(ParsedToken(str(int(cols[0]) + tokoffset),cols[1],cols[2],cols[3],cols[4],cols[5],str(int(cols[6]) + tokoffset),cols[7].strip(),cols[8],cols[9].strip(),cols[0],[]))
+				else:  # Attempt to read as 8 column Malt input
+					conll_tokens.append(ParsedToken(str(int(cols[0]) + tokoffset),cols[1],cols[2],cols[3],cols[4],cols[5],str(int(cols[6]) + tokoffset),cols[7].strip(),cols[6],cols[7].strip(),cols[0],[]))
+					self.input_mode = "8col"
 				sentlength += 1
 				children[str(int(cols[6]) + tokoffset)].append(str(int(cols[0]) + tokoffset))
 				child_funcs[(int(cols[6]) + tokoffset)].append(cols[7])
