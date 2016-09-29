@@ -17,7 +17,7 @@ from copy import copy, deepcopy
 import sys
 from collections import defaultdict
 
-__version__ = "1.6.0"
+__version__ = "1.6.2"
 
 def escape(string,symbol_to_mask,border_marker):
 	inside = False
