@@ -9,13 +9,15 @@ Input: CoNLL10 (10 columns, tab-delimited, blank line between sentences)
 Author: Amir Zeldes
 """
 
+from __future__ import print_function
 import argparse
 import re
+from io import open as io_open
 from copy import copy, deepcopy
 import sys
 from collections import defaultdict
 
-__version__ = "1.5.1"
+__version__ = "1.6.0"
 
 def escape(string,symbol_to_mask,border_marker):
 	inside = False
@@ -611,10 +613,9 @@ if __name__ == "__main__":
 	parser.add_argument('file',action="store",help="Input file name to process")
 	options = parser.parse_args()
 
-	infile = open(options.file)
-	config_file = open(options.config)
+	infile = io_open(options.file, encoding="utf8")
+	config_file = io_open(options.config, encoding="utf8")
 	depedit = DepEdit(config_file)
 	output_trees = depedit.run_depedit(infile)
-	print output_trees
-
+	print(output_trees)
 
