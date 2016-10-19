@@ -17,7 +17,7 @@ from copy import copy, deepcopy
 import sys
 from collections import defaultdict
 
-__version__ = "1.6.2"
+__version__ = "1.6.3"
 
 def escape(string,symbol_to_mask,border_marker):
 	inside = False
@@ -233,8 +233,24 @@ class Match:
 
 class DepEdit():
 
-	def __init__(self, config_file):
+	def __init__(self, config_file=""):
 		self.transformations = []
+		self.user_transformation_counter = 0
+		if not config_file == "":
+			self.read_config_file(config_file)
+
+	def read_config_file(self, config_file, clear_transformations = False):
+		"""
+		Function to read configuration file. Can be invoked after initialization.
+
+		:param config_file: The file to read instructions from.
+		:param clear_transformations: Whether to discard previous instructions.
+		:return: void
+		"""
+
+		if clear_transformations:
+			self.transformations = []
+			self.user_transformation_counter = 0
 		line_num = 0
 		for instruction in config_file:
 			line_num += 1
@@ -548,6 +564,43 @@ class DepEdit():
 							tok2 = result[node2]
 							if tok1 != tok2:
 								tok2.head = tok1.id
+
+	def add_transformation(self, *args, **kwargs):
+		"""
+		Flexible function for adding transformations to an imported DepEdit object, rather than reading them from a configuration file
+
+		:param args: a string specifying a transformation line (three specs separated by two tabs), or a tuples of such strings
+		:param kwargs: alternatively, a dictionary supplying three lists for the keys: 'nodes', 'rels', 'actions'
+		:return: void
+		"""
+
+		if len(args)>0:  # Single string transformation(s)
+
+			if not isinstance(args,list): # Make list out of input tuple
+				args = list(arg for arg in args)
+				if isinstance(args[0], list):  # Flatten list in case user provided a list
+					args = args[0]
+			for transformation_string in args:
+				try:
+					self.user_transformation_counter += 1
+					user_line_number = "u" + str(self.user_transformation_counter)
+					new_transformation = Transformation(transformation_string,user_line_number)
+					self.transformations.append(new_transformation)
+				except:
+					raise IOError("Invalid transformation - must be a string")
+		elif "nodes" in kwargs and "rels" in kwargs and "actions" in kwargs:
+			if not (isinstance(kwargs["nodes"], list) and (isinstance(kwargs["nodes"], list)) and (isinstance(kwargs["nodes"], list))):
+				raise IOError("Invalid transformation - must supply three lists in values for keys: nodes, rels, actions")
+			else:
+				node_clause = ";".join(kwargs["nodes"])
+				rel_clause = ";".join(kwargs["rels"])
+				actions_clause = ";".join(kwargs["actions"])
+				transformation_string = "\t".join([node_clause,rel_clause,actions_clause])
+
+				self.user_transformation_counter += 1
+				user_line_number = "u" + str(self.user_transformation_counter)
+				new_transformation = Transformation(transformation_string, user_line_number)
+				self.transformations.append(new_transformation)
 
 	def serialize_output_tree(self,tokens, tokoffset):
 		output_tree = ""
