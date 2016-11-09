@@ -17,7 +17,8 @@ from copy import copy, deepcopy
 import sys
 from collections import defaultdict
 
-__version__ = "1.6.3"
+__version__ = "DEVELOP"
+
 
 def escape(string,symbol_to_mask,border_marker):
 	inside = False
@@ -32,8 +33,9 @@ def escape(string,symbol_to_mask,border_marker):
 			output += char
 	return output
 
+
 class ParsedToken:
-	def __init__(self, tok_id, text, lemma, pos, cpos, morph, head, func, head2, func2, num, child_funcs):
+	def __init__(self, tok_id, text, lemma, pos, cpos, morph, head, func, head2, func2, num, child_funcs, position):
 		self.id = tok_id
 		self.text = text
 		self.pos = pos
@@ -46,9 +48,25 @@ class ParsedToken:
 		self.func2 = func2
 		self.num = num
 		self.child_funcs = child_funcs
+		self.position = position
 
 	def __repr__(self):
 		return str(self.text) + " (" + str(self.pos) + "/" + str(self.lemma) + ") " + "<-" + str(self.func)
+
+
+class Sentence:
+
+	def __init__(self,sentence_string=""):
+		self.sentence_string = sentence_string
+		self.length = 0
+		self.annotations = {}
+
+	def print_annos(self):
+		out_string = ""
+		for key,val in self.annotations.iteritems():
+			out_string += "# " + key + "=" + val + "\n"
+		return out_string
+
 
 class Transformation:
 
@@ -71,7 +89,7 @@ class Transformation:
 			for def_index, esc_string in enumerate(escaped_definitions):
 				definitions.append(DefinitionMatcher(esc_string,def_index + 1))
 			relations = relation_string.split(";")
-			actions = action_string.split(";")
+			actions = action_string.strip().split(";")
 			return [definitions, relations, actions]
 
 	@staticmethod
@@ -103,7 +121,8 @@ class Transformation:
 			criteria = (_crit.replace("%%%%%","&") for _crit in criteria)
 			for criterion in criteria:
 				if not re.match("(text|pos|cpos|lemma|morph|func|head|func2|head2|num)!?=/[^/=]*/",criterion):
-					report+= "Invalid node definition in column 1: " + criterion
+					if re.match (r"position!?=/first|last|mid/",criterion):
+						report+= "Invalid node definition in column 1: " + criterion
 		for relation in self.relations:
 			if relation == "none" and len(self.relations) == 1:
 				if len(self.definitions) > 1:
@@ -119,8 +138,9 @@ class Transformation:
 		for action in self.actions:
 			commands = action.split(";")
 			for command in commands:
-				if not re.match(r"(#[0-9]+>#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|head|head2|func2|num)=[^=]*)$",command):
-					report += "Column 3 invalid action definition: " + command + " and the action was " + action
+				if not re.match(r"(#[0-9]+>#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|head|head2|func2|num)=[^=]*)$",command):  # Node action
+					if not re.match(r"#S:[A-Za-z_]+=[A-Za-z_]+$|last$", command):  # Sentence annotation action or quit
+						report += "Column 3 invalid action definition: " + command + " and the action was " + action
 		return report
 
 
@@ -141,7 +161,9 @@ class DefinitionMatcher:
 				criterion = criterion[:-1]
 			else:
 				negative_criterion = False
+
 			def_value = def_item.split("=")[1][1:-1]
+
 			# Ensure regex is anchored
 			if def_value[0] != "^":
 				def_value = "^" + def_value
@@ -283,7 +305,9 @@ class DepEdit():
 			self.add_groups(result_sets)
 			if len(result_sets) > 0:
 				for action in transformation.actions:
-					self.execute_action(result_sets, action)
+					retval = self.execute_action(result_sets, action)
+					if retval == "last": # Explicit instruction to cease processing
+						return self.serialize_output_tree(conll_tokens[tokoffset + 1:], tokoffset)
 		return self.serialize_output_tree(conll_tokens[tokoffset + 1:], tokoffset)
 
 	def matches_relation(self, node_matches, relation, result_sets):
@@ -529,32 +553,39 @@ class DepEdit():
 		for result in result_sets:
 			if len(result) > 0:
 				for action in actions:
-					if ":" in action:  # Unary node instruction
-						node_position = int(action[1:action.find(":")])
-						property = action[action.find(":")+1:action.find("=")]
-						value = action[action.find("=")+1:].strip()
-						group_num_match = re.search(r"(\$[0-9]+[LU]?)",value)
-						if group_num_match is not None:
-							no_dollar = group_num_match.groups(0)[0][1:]
-							case = ""
-							if no_dollar[-1] == "U":
-								case = "upper"
-								no_dollar = no_dollar[0:-1]
-							elif no_dollar[-1] == "L":
-								case = "lower"
-								no_dollar = no_dollar[0:-1]
-							group_num = int(no_dollar)
-							try:
-								group_value = result["groups"][group_num - 1]
-								if case == "lower":
-									group_value = group_value.lower()
-								elif case == "upper":
-									group_value = group_value.upper()
-							except IndexError:
-								sys.stderr.write("The action '" + action + "' refers to a missing regex bracket group '$" + str(group_num) + "'\n")
-								sys.exit()
-							value = re.sub(r"\$[0-9]+[LR]?",group_value,value)
-						setattr(result[node_position],property,value)
+					if action == "last":
+						return "last"
+					elif ":" in action:  # Unary instruction
+						if action.startswith("#S:"):  # Sentence annotation instruction
+							key_val = action.split(":")[1]
+							key, val = key_val.split("=")
+							result[1].sentence.annotations[key] = val
+						else: # node instruction
+							node_position = int(action[1:action.find(":")])
+							property = action[action.find(":")+1:action.find("=")]
+							value = action[action.find("=")+1:].strip()
+							group_num_match = re.search(r"(\$[0-9]+[LU]?)",value)
+							if group_num_match is not None:
+								no_dollar = group_num_match.groups(0)[0][1:]
+								case = ""
+								if no_dollar[-1] == "U":
+									case = "upper"
+									no_dollar = no_dollar[0:-1]
+								elif no_dollar[-1] == "L":
+									case = "lower"
+									no_dollar = no_dollar[0:-1]
+								group_num = int(no_dollar)
+								try:
+									group_value = result["groups"][group_num - 1]
+									if case == "lower":
+										group_value = group_value.lower()
+									elif case == "upper":
+										group_value = group_value.upper()
+								except IndexError:
+									sys.stderr.write("The action '" + action + "' refers to a missing regex bracket group '$" + str(group_num) + "'\n")
+									sys.exit()
+								value = re.sub(r"\$[0-9]+[LR]?",group_value,value)
+							setattr(result[node_position],property,value)
 					else:  # Binary instruction
 						if ">" in action:  # Head relation
 							operator = ">"
@@ -628,11 +659,17 @@ class DepEdit():
 		conll_tokens.append(0)
 		my_output = ""
 		sentence_string = ""
+		current_sentence = Sentence()
 
 		for myline in infile:
 			if sentlength > 0 and "\t" not in myline:
-				my_output += self.process_sentence(conll_tokens, tokoffset, self.transformations)
+				current_sentence.length = sentlength
+				conll_tokens[-1].position = "last"
+				transformed = self.process_sentence(conll_tokens, tokoffset, self.transformations)
+				transformed = current_sentence.print_annos() + transformed
+				my_output += transformed
 				sentence_string = ""
+				current_sentence = Sentence()
 				if sentlength > 0:
 					tokoffset += sentlength
 				sentlength = 0
@@ -644,17 +681,25 @@ class DepEdit():
 				sentence_string += myline
 				cols = myline.split("\t")
 				if len(cols) > 8:
-				# Collect token from line; note that head2 is parsed as a string, which is often "_" for monoplanar trees
-					conll_tokens.append(ParsedToken(str(int(cols[0]) + tokoffset),cols[1],cols[2],cols[3],cols[4],cols[5],str(int(cols[6]) + tokoffset),cols[7].strip(),cols[8],cols[9].strip(),cols[0],[]))
+					# Collect token from line; note that head2 is parsed as a string, which is often "_" for monoplanar trees
+					this_tok = ParsedToken(str(int(cols[0]) + tokoffset), cols[1], cols[2], cols[3], cols[4], cols[5],str(int(cols[6]) + tokoffset), cols[7].strip(), cols[8], cols[9].strip(), cols[0], [], "mid")
 				else:  # Attempt to read as 8 column Malt input
-					conll_tokens.append(ParsedToken(str(int(cols[0]) + tokoffset),cols[1],cols[2],cols[3],cols[4],cols[5],str(int(cols[6]) + tokoffset),cols[7].strip(),cols[6],cols[7].strip(),cols[0],[]))
+					this_tok = ParsedToken(str(int(cols[0]) + tokoffset),cols[1],cols[2],cols[3],cols[4],cols[5],str(int(cols[6]) + tokoffset),cols[7].strip(),cols[6],cols[7].strip(),cols[0],[], "mid")
 					self.input_mode = "8col"
+				if cols[0] == "1":
+					this_tok.position = "first"
+				this_tok.sentence = current_sentence
+				conll_tokens.append(this_tok)
 				sentlength += 1
 				children[str(int(cols[6]) + tokoffset)].append(str(int(cols[0]) + tokoffset))
 				child_funcs[(int(cols[6]) + tokoffset)].append(cols[7])
 
 		if sentlength > 0:  # Possible final sentence without trailing new line
-			my_output += self.process_sentence(conll_tokens, tokoffset, self.transformations)
+			current_sentence.length = sentlength
+			conll_tokens[-1].position = "last"
+			transformed = self.process_sentence(conll_tokens, tokoffset, self.transformations)
+			transformed = current_sentence.print_annos() + transformed
+			my_output += transformed
 
 		return my_output
 
@@ -670,5 +715,5 @@ if __name__ == "__main__":
 	config_file = io_open(options.config, encoding="utf8")
 	depedit = DepEdit(config_file)
 	output_trees = depedit.run_depedit(infile)
-	print(output_trees)
+	print(output_trees.encode("utf-8"))
 
