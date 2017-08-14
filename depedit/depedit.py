@@ -35,7 +35,7 @@ def escape(string,symbol_to_mask,border_marker):
 
 
 class ParsedToken:
-	def __init__(self, tok_id, text, lemma, pos, cpos, morph, head, func, head2, func2, num, child_funcs, position):
+	def __init__(self, tok_id, text, lemma, pos, cpos, morph, head, func, head2, func2, num, child_funcs, position, is_super_tok=False):
 		self.id = tok_id
 		self.text = text
 		self.pos = pos
@@ -49,6 +49,7 @@ class ParsedToken:
 		self.num = num
 		self.child_funcs = child_funcs
 		self.position = position
+		self.is_super_tok = is_super_tok
 
 	def __repr__(self):
 		return str(self.text) + " (" + str(self.pos) + "/" + str(self.lemma) + ") " + "<-" + str(self.func)
@@ -71,6 +72,7 @@ class Sentence:
 class Transformation:
 
 	def parse_transformation(self, transformation_text):
+		transformation_text = transformation_text.replace("\\=","%de_equals%")
 		if transformation_text.count("\t") < 2:
 			return None
 		else:
@@ -289,13 +291,14 @@ class DepEdit():
 			sys.stderr.write(report)
 			sys.exit()
 
-	def process_sentence(self, conll_tokens, tokoffset, transformations):
+	def process_sentence(self, conll_tokens, tokoffset, supertok_offset, transformations):
 		for transformation in transformations:
 			node_matches = defaultdict(list)
 			for def_matcher in transformation.definitions:
-				for token in conll_tokens[tokoffset+1:]:
-					if def_matcher.match(token):
-						node_matches[def_matcher.def_index].append(Match(def_matcher.def_index, token, def_matcher.groups))
+				for token in conll_tokens[tokoffset+supertok_offset+1:]:
+					if not token.is_super_tok:
+						if def_matcher.match(token):
+							node_matches[def_matcher.def_index].append(Match(def_matcher.def_index, token, def_matcher.groups))
 			result_sets = []
 			for relation in transformation.relations:
 				found = self.matches_relation(node_matches, relation, result_sets)
@@ -307,8 +310,8 @@ class DepEdit():
 				for action in transformation.actions:
 					retval = self.execute_action(result_sets, action)
 					if retval == "last": # Explicit instruction to cease processing
-						return self.serialize_output_tree(conll_tokens[tokoffset + 1:], tokoffset)
-		return self.serialize_output_tree(conll_tokens[tokoffset + 1:], tokoffset)
+						return self.serialize_output_tree(conll_tokens[tokoffset + supertok_offset + 1:], tokoffset)
+		return self.serialize_output_tree(conll_tokens[tokoffset + supertok_offset + 1:], tokoffset)
 
 	def matches_relation(self, node_matches, relation, result_sets):
 		if len(relation) == 0:
@@ -336,6 +339,7 @@ class DepEdit():
 				matches[node1].append(tok1)
 				result[node1] = tok1
 				result["rel"] = relation
+				result["matchers"] = [matcher1]
 				result_sets.append(result)
 		else:
 			node1 = relation.split(operator)[0]
@@ -636,16 +640,23 @@ class DepEdit():
 	def serialize_output_tree(self,tokens, tokoffset):
 		output_tree = ""
 		for tok in tokens:
-			if tok.head == "0":
+			if tok.is_super_tok:
+				tok_head_string = tok.head
+				tok_id = tok.id
+			elif tok.head == "0":
 				tok_head_string = "0"
+				tok_id = str(int(tok.id) - tokoffset)
 			else:
 				tok_head_string = str(int(tok.head)-tokoffset)
+				tok_id = str(int(tok.id)-tokoffset)
 			if self.input_mode == "8col":
-				output_tree += str(int(tok.id)-tokoffset)+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.cpos+"\t"+tok.morph+\
+				output_tree += tok_id+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.cpos+"\t"+tok.morph+\
 								"\t"+tok_head_string+"\t"+tok.func+"\n"
 			else:
-				output_tree += str(int(tok.id)-tokoffset)+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.cpos+"\t"+tok.morph+\
+				output_tree += tok_id+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.cpos+"\t"+tok.morph+\
 								"\t"+tok_head_string+"\t"+tok.func+"\t"+tok.head2+"\t"+tok.func2+"\n"
+		# Restore depedit escapes
+		output_tree = output_tree.replace("%de_equals%","=")
 		return output_tree
 
 	def run_depedit(self, infile):
@@ -654,7 +665,9 @@ class DepEdit():
 		conll_tokens = []
 		self.input_mode = "10col"
 		tokoffset = 0
+		supertok_offset = 0
 		sentlength = 0
+		supertok_length = 0
 
 		conll_tokens.append(0)
 		my_output = ""
@@ -665,14 +678,16 @@ class DepEdit():
 			if sentlength > 0 and "\t" not in myline:
 				current_sentence.length = sentlength
 				conll_tokens[-1].position = "last"
-				transformed = self.process_sentence(conll_tokens, tokoffset, self.transformations)
+				transformed = self.process_sentence(conll_tokens, tokoffset, supertok_offset, self.transformations)
 				transformed = current_sentence.print_annos() + transformed
 				my_output += transformed
 				sentence_string = ""
 				current_sentence = Sentence()
 				if sentlength > 0:
 					tokoffset += sentlength
+					supertok_offset += supertok_length
 				sentlength = 0
+				supertok_length = 0
 			if myline.startswith("#"):  # Preserve comment lines
 					my_output += myline
 			elif myline.strip() == "":
@@ -680,24 +695,35 @@ class DepEdit():
 			elif myline.find("\t") > 0:  # Only process lines that contain tabs (i.e. conll tokens)
 				sentence_string += myline
 				cols = myline.split("\t")
+				if "-" in cols[0]: # potential conllu super-token, just preserve
+					super_tok = True
+					tok_id = cols[0]
+					head_id = cols[6]
+				else:
+					super_tok = False
+					tok_id = str(int(cols[0]) + tokoffset)
+					head_id = str(int(cols[6]) + tokoffset)
 				if len(cols) > 8:
 					# Collect token from line; note that head2 is parsed as a string, which is often "_" for monoplanar trees
-					this_tok = ParsedToken(str(int(cols[0]) + tokoffset), cols[1], cols[2], cols[3], cols[4], cols[5],str(int(cols[6]) + tokoffset), cols[7].strip(), cols[8], cols[9].strip(), cols[0], [], "mid")
+					this_tok = ParsedToken(tok_id, cols[1], cols[2], cols[3], cols[4], cols[5],head_id, cols[7].strip(), cols[8], cols[9].strip(), cols[0], [], "mid",super_tok)
 				else:  # Attempt to read as 8 column Malt input
-					this_tok = ParsedToken(str(int(cols[0]) + tokoffset),cols[1],cols[2],cols[3],cols[4],cols[5],str(int(cols[6]) + tokoffset),cols[7].strip(),cols[6],cols[7].strip(),cols[0],[], "mid")
+					this_tok = ParsedToken(tok_id,cols[1],cols[2],cols[3],cols[4],cols[5],head_id,cols[7].strip(),cols[6],cols[7].strip(),cols[0],[], "mid",super_tok)
 					self.input_mode = "8col"
-				if cols[0] == "1":
+				if cols[0] == "1" and not super_tok:
 					this_tok.position = "first"
 				this_tok.sentence = current_sentence
 				conll_tokens.append(this_tok)
-				sentlength += 1
-				children[str(int(cols[6]) + tokoffset)].append(str(int(cols[0]) + tokoffset))
-				child_funcs[(int(cols[6]) + tokoffset)].append(cols[7])
+				if not super_tok:
+					sentlength += 1
+					children[str(int(cols[6]) + tokoffset)].append(tok_id)
+					child_funcs[(int(cols[6]) + tokoffset)].append(cols[7])
+				else:
+					supertok_length += 1
 
 		if sentlength > 0:  # Possible final sentence without trailing new line
 			current_sentence.length = sentlength
 			conll_tokens[-1].position = "last"
-			transformed = self.process_sentence(conll_tokens, tokoffset, self.transformations)
+			transformed = self.process_sentence(conll_tokens, tokoffset, supertok_offset, self.transformations)
 			transformed = current_sentence.print_annos() + transformed
 			my_output += transformed
 
