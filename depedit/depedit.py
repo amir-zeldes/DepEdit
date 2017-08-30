@@ -16,6 +16,7 @@ from io import open as io_open
 from copy import copy, deepcopy
 import sys
 from collections import defaultdict
+from glob import glob
 
 __version__ = "DEVELOP"
 
@@ -734,12 +735,32 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-c', '--config', action="store", dest="config", default="config.ini", help="Configuration file defining transformation")
 	parser.add_argument('--version', action='version', version=depedit_version)
-	parser.add_argument('file',action="store",help="Input file name to process")
+	parser.add_argument('file',action="store",help="Input file name or glob pattern to process")
 	options = parser.parse_args()
 
-	infile = io_open(options.file, encoding="utf8")
-	config_file = io_open(options.config, encoding="utf8")
+	try:
+		config_file = io_open(options.config, encoding="utf8")
+	except IOError:
+		sys.stderr.write("\nConfiguration file not found (specify with -c or use the default 'config.ini')\n")
+		sys.exit()
 	depedit = DepEdit(config_file)
-	output_trees = depedit.run_depedit(infile)
-	print(output_trees.encode("utf-8"))
+
+	files = glob(options.file)
+	for filename in files:
+		infile = io_open(filename, encoding="utf8")
+		output_trees = depedit.run_depedit(infile)
+		if len(files) == 1:
+			# Single file being processed, just print to STDOUT
+			print(output_trees.encode("utf-8"))
+		else:
+			# Multiple files, add '.depedit' before extension and write to file
+			outname = filename
+			if "." in filename:
+				extension = outname[outname.rfind(".")+1:]
+				outname = outname[:outname.rfind(".")]
+				outname += ".depedit." + extension
+			else:
+				outname += ".depedit"
+			with open(outname,'w') as f:
+				f.write(output_trees.encode("utf-8"))
 
