@@ -4,7 +4,7 @@
 """
 DepEdit - A simple configurable tool for manipulating dependency trees
 
-Input: CoNLL10 (10 columns, tab-delimited, blank line between sentences)
+Input: CoNLL10 or CoNLLU (10 columns, tab-delimited, blank line between sentences, comments with pound sign #)
 
 Author: Amir Zeldes
 """
@@ -73,7 +73,6 @@ class Sentence:
 class Transformation:
 
 	def parse_transformation(self, transformation_text):
-		transformation_text = transformation_text.replace("\\=","%de_equals%")
 		if transformation_text.count("\t") < 2:
 			return None
 		else:
@@ -141,7 +140,7 @@ class Transformation:
 		for action in self.actions:
 			commands = action.split(";")
 			for command in commands:
-				if not re.match(r"(#[0-9]+>#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|head|head2|func2|num)=[^=]*)$",command):  # Node action
+				if not re.match(r"(#[0-9]+>#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|head|head2|func2|num)=[^;]*)$",command):  # Node action
 					if not re.match(r"#S:[A-Za-z_]+=[A-Za-z_]+$|last$", command):  # Sentence annotation action or quit
 						report += "Column 3 invalid action definition: " + command + " and the action was " + action
 		return report
@@ -158,14 +157,14 @@ class DefinitionMatcher:
 		def_items = self.def_text.split("&")
 		for def_item in def_items:
 			def_item = def_item.replace("%%%%%","&")
-			criterion = def_item.split("=")[0]
+			criterion = def_item.split("=",1)[0]
 			if criterion[-1] == "!":
 				negative_criterion = True
 				criterion = criterion[:-1]
 			else:
 				negative_criterion = False
 
-			def_value = def_item.split("=")[1][1:-1]
+			def_value = def_item.split("=",1)[1][1:-1]
 
 			# Ensure regex is anchored
 			if def_value[0] != "^":
@@ -563,7 +562,7 @@ class DepEdit():
 					elif ":" in action:  # Unary instruction
 						if action.startswith("#S:"):  # Sentence annotation instruction
 							key_val = action.split(":")[1]
-							key, val = key_val.split("=")
+							key, val = key_val.split("=",1)
 							result[1].sentence.annotations[key] = val
 						else: # node instruction
 							node_position = int(action[1:action.find(":")])
@@ -656,8 +655,6 @@ class DepEdit():
 			else:
 				output_tree += tok_id+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.cpos+"\t"+tok.morph+\
 								"\t"+tok_head_string+"\t"+tok.func+"\t"+tok.head2+"\t"+tok.func2+"\n"
-		# Restore depedit escapes
-		output_tree = output_tree.replace("%de_equals%","=")
 		return output_tree
 
 	def run_depedit(self, infile):
