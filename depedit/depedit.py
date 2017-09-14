@@ -18,7 +18,7 @@ import sys
 from collections import defaultdict
 from glob import glob
 
-__version__ = "DEVELOP"
+__version__ = "2.0.0"
 
 
 def escape(string,symbol_to_mask,border_marker):
