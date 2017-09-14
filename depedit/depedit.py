@@ -92,7 +92,21 @@ class Transformation:
 				definitions.append(DefinitionMatcher(esc_string,def_index + 1))
 			relations = relation_string.split(";")
 			actions = action_string.strip().split(";")
-			return [definitions, relations, actions]
+			aliased_actions = []
+			for action in actions:
+				aliased_actions.append(self.handle_aliases(action))
+			return [definitions, relations, aliased_actions]
+
+	@staticmethod
+	def handle_aliases(orig_action):
+		orig_action = orig_action.replace(":form=",":text=")
+		orig_action = orig_action.replace(":upostag=", ":pos=")
+		orig_action = orig_action.replace(":xpostag=",":cpos=")
+		orig_action = orig_action.replace(":feats=",":morph=")
+		orig_action = orig_action.replace(":deprel=",":func=")
+		orig_action = orig_action.replace(":deps=",":head2=")
+		orig_action = orig_action.replace(":misc=",":func2=")
+		return orig_action
 
 	@staticmethod
 	def normalize_shorthand(criterion_string):
@@ -122,8 +136,8 @@ class Transformation:
 			criteria = node.split("&")
 			criteria = (_crit.replace("%%%%%","&") for _crit in criteria)
 			for criterion in criteria:
-				if not re.match("(text|pos|cpos|lemma|morph|func|head|func2|head2|num)!?=/[^/=]*/",criterion):
-					if re.match (r"position!?=/first|last|mid/",criterion):
+				if not re.match("(text|pos|cpos|lemma|morph|func|head|func2|head2|num|form|upostag|xpostag|feats|deprel|deps|misc)!?=/[^/=]*/",criterion):
+					if not re.match(r"position!?=/first|last|mid/",criterion):
 						report+= "Invalid node definition in column 1: " + criterion
 		for relation in self.relations:
 			if relation == "none" and len(self.relations) == 1:
@@ -140,7 +154,7 @@ class Transformation:
 		for action in self.actions:
 			commands = action.split(";")
 			for command in commands:
-				if not re.match(r"(#[0-9]+>#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|head|head2|func2|num)=[^;]*)$",command):  # Node action
+				if not re.match(r"(#[0-9]+>#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|head|head2|func2|num|form|upostag|xpostag|feats|deprel|deps|misc)=[^;]*)$",command):  # Node action
 					if not re.match(r"#S:[A-Za-z_]+=[A-Za-z_]+$|last$", command):  # Sentence annotation action or quit
 						report += "Column 3 invalid action definition: " + command + " and the action was " + action
 		return report
@@ -198,6 +212,22 @@ class DefinitionMatcher:
 class Definition:
 
 	def __init__(self, criterion, value, negative=False):
+		# Handle conllu criterion aliases:
+		if criterion == "form":
+			criterion = "text"
+		elif criterion == "upostag":
+			criterion = "pos"
+		elif criterion == "xpostag":
+			criterion = "cpos"
+		elif criterion == "feats":
+			criterion = "morph"
+		elif criterion == "deprel":
+			criterion = "func"
+		elif criterion == "deps":
+			criterion = "head2"
+		elif criterion == "misc":
+			criterion = "func2"
+
 		self.criterion = criterion
 		self.value = value
 		self.match_type = ""
