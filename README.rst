@@ -10,4 +10,10 @@ dependency function and other columns, as well as rewiring dependency graphs bas
 You can also use it to add annotations to each sentence based on properties of the subgraph 
 (see the English example of tagging rough sentence type in examples/)
 
+To use the script, either copy the file *depedit/depedit.py* into your project, or install it from PyPI:
+
+.. code-block:: bash
+
+  pip install depedit
+
 For more information see https://corpling.uis.georgetown.edu/depedit/
