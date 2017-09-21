@@ -779,7 +779,10 @@ if __name__ == "__main__":
 		output_trees = depedit.run_depedit(infile)
 		if len(files) == 1:
 			# Single file being processed, just print to STDOUT
-			print(output_trees.encode("utf-8"))
+			if sys.version_info[0] < 3:
+				print(output_trees.encode("utf-8"))
+			else:
+				print(output_trees)
 		else:
 			# Multiple files, add '.depedit' before extension and write to file
 			outname = filename
