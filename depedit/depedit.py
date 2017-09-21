@@ -17,8 +17,9 @@ from copy import copy, deepcopy
 import sys
 from collections import defaultdict
 from glob import glob
+from six import iteritems
 
-__version__ = "2.0.0"
+__version__ = "DEVELOP"
 
 
 def escape(string,symbol_to_mask,border_marker):
@@ -65,7 +66,7 @@ class Sentence:
 
 	def print_annos(self):
 		out_string = ""
-		for key,val in self.annotations.iteritems():
+		for (key,val) in iteritems(self.annotations):
 			out_string += "# " + key + "=" + val + "\n"
 		return out_string
 
