@@ -111,11 +111,11 @@ class Transformation:
 
 	@staticmethod
 	def normalize_shorthand(criterion_string):
+		criterion_string = criterion_string.replace('.*', '.1,1000')
 		temp = ""
 		while temp != criterion_string:
 			temp = criterion_string
 			criterion_string = re.sub(r'(#[0-9]+)(>|\.(?:[0-9]+(?:,[0-9]+)?)?)(#[0-9]+)(>|\.(?:[0-9]+(?:,[0-9]+)?)?)', r'\1\2\3;\3\4', criterion_string)
-		criterion_string = criterion_string.replace('.*', '.1,1000')
 		return criterion_string
 
 	def __init__(self, transformation_text, line):
@@ -152,7 +152,7 @@ class Transformation:
 				for criterion in criteria:
 					criterion = criterion.strip()
 					if not re.match(r"#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+",criterion):
-						report += "Column 2 relation setting invalid criterion: " + criterion + ". "
+						report += "Column 2 relation setting invalid criterion: " + criterion + "."
 		for action in self.actions:
 			commands = action.split(";")
 			for command in commands:
@@ -313,14 +313,14 @@ class DepEdit():
 			if len(instruction)>0 and not instruction.startswith(";") and not instruction.startswith("#") and not instruction.strip() =="":
 				self.transformations.append(Transformation(instruction, line_num))
 
-		report = ""
+		trans_report = ""
 		for transformation in self.transformations:
-			trans_report = transformation.validate()
-			if trans_report != "":
-				report += "On line " + str(transformation.line) + ": " + trans_report +"\n"
-		if len(report) > 0:
-			report = "Depedit says: error in configuration file\n" + report
-			sys.stderr.write(report)
+			temp_report = transformation.validate()
+			if temp_report != "":
+				trans_report += "On line " + str(transformation.line) + ": " + temp_report +"\n"
+		if len(trans_report) > 0:
+			trans_report = "Depedit says: error in configuration file\n\n" + trans_report
+			sys.stderr.write(trans_report)
 			sys.exit()
 
 	def process_sentence(self, conll_tokens, tokoffset, supertok_offset, transformations):
@@ -469,7 +469,9 @@ class DepEdit():
 							if all(ids_are_in_bin):
 								nodes_are_identical = list((set_to_merge[nid] == my_bin[nid]) for nid in node_ids)
 								if all(nodes_are_identical):
-									solutions.append(my_bin)
+									my_bin["rels"].append(set_to_merge["rel"])
+									if len(my_bin["rels"]) == rel_count:  # Check if we now have all required relations
+										solutions.append(my_bin)
 
 		merged_bins = []
 		for solution in solutions:
