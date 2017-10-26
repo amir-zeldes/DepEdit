@@ -115,6 +115,7 @@ class Transformation:
 		while temp != criterion_string:
 			temp = criterion_string
 			criterion_string = re.sub(r'(#[0-9]+)(>|\.(?:[0-9]+(?:,[0-9]+)?)?)(#[0-9]+)(>|\.(?:[0-9]+(?:,[0-9]+)?)?)', r'\1\2\3;\3\4', criterion_string)
+		criterion_string = criterion_string.replace('.*', '.1,1000')
 		return criterion_string
 
 	def __init__(self, transformation_text, line):
