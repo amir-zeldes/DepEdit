@@ -151,7 +151,8 @@ class Transformation:
 				criteria = relation.split(";")
 				for criterion in criteria:
 					criterion = criterion.strip()
-					if not re.match(r"#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+",criterion):
+					#if not re.match(r"#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+",criterion):
+					if not re.match(r"(#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+|#[0-9]+:(text|pos|cpos|lemma|morph|func|head|func2|head2|num|form|upostag|xpostag|feats|deprel|deps|misc)==#[0-9]+)", criterion):
 						report += "Column 2 relation setting invalid criterion: " + criterion + "."
 		for action in self.actions:
 			commands = action.split(";")
@@ -238,7 +239,7 @@ class Definition:
 		self.set_match_type()
 
 	def set_match_type(self):
-		value  = self.value[1:-1]
+		value = self.value[1:-1]
 
 		if self.value == "^.*$" and not self.negative:
 			self.match_func = self.return_true
@@ -348,7 +349,10 @@ class DepEdit():
 	def matches_relation(self, node_matches, relation, result_sets):
 		if len(relation) == 0:
 			return
-
+		elif "==" in relation:
+			m = re.search(r':(.+)==', relation)
+			operator = m.group()
+			field = m.group(1)
 		elif "." in relation:
 			if re.match(r'.*\.[0-9]', relation):
 				m = re.match(r'.*\.[0-9]*,?[0-9]*#', relation)
@@ -373,6 +377,29 @@ class DepEdit():
 				result["rel"] = relation
 				result["matchers"] = [matcher1]
 				result_sets.append(result)
+		elif "==" in relation:
+			node1 = relation.split(operator)[0]
+			node2 = relation.split(operator)[1]
+			node1=int(node1.replace("#", ""))
+			node2=int(node2.replace("#", ""))
+
+			for matcher1 in node_matches[node1]:
+				tok1 = matcher1.token
+				for matcher2 in node_matches[node2]:
+					tok2 = matcher2.token
+					if self.test_relation(tok1, tok2, field):
+						result_sets.append({node1: tok1, node2: tok2, "rel": relation, "matchers": [matcher1, matcher2] })
+						matches[node1].append(tok1)
+						matches[node2].append(tok2)
+						hits += 1
+
+			for option in [node1,node2]:
+				matchers_to_remove = []
+				for matcher in node_matches[option]:
+					if matcher.token not in matches[option]:
+						matchers_to_remove.append(matcher)
+				for matcher in matchers_to_remove:
+					node_matches[option].remove(matcher)
 		else:
 			node1 = relation.split(operator)[0]
 			node2 = relation.split(operator)[1]
@@ -432,6 +459,10 @@ class DepEdit():
 					return True
 				else:
 					return False
+		else:
+			val1 = getattr(node1,operator)
+			val2 = getattr(node2,operator)
+			return val1 == val2
 
 
 	def merge_sets(self, sets, node_count, rel_count):
@@ -691,7 +722,7 @@ class DepEdit():
 								"\t"+tok_head_string+"\t"+tok.func+"\t"+tok.head2+"\t"+tok.func2+"\n"
 		return output_tree
 
-	def run_depedit(self, infile):
+	def run_depedit(self, infile, filename="file"):
 		children = defaultdict(list)
 		child_funcs = defaultdict(list)
 		conll_tokens = []
@@ -721,7 +752,7 @@ class DepEdit():
 				sentlength = 0
 				supertok_length = 0
 			if myline.startswith("#"):  # Preserve comment lines
-					my_output += myline
+					my_output += myline + "\n"
 			elif myline.strip() == "":
 					my_output += "\n"
 			elif myline.find("\t") > 0:  # Only process lines that contain tabs (i.e. conll tokens)
@@ -734,7 +765,11 @@ class DepEdit():
 				else:
 					super_tok = False
 					tok_id = str(int(cols[0]) + tokoffset)
-					head_id = str(int(cols[6]) + tokoffset)
+					if cols[6] == "_":
+						sys.stderr.write("DepEdit WARN: head not set for token " + tok_id + " in " + filename + "\n")
+						head_id = str(0 + tokoffset)
+					else:
+						head_id = str(int(cols[6]) + tokoffset)
 				if len(cols) > 8:
 					# Collect token from line; note that head2 is parsed as a string, which is often "_" for monoplanar trees
 					this_tok = ParsedToken(tok_id, cols[1], cols[2], cols[3], cols[4], cols[5],head_id, cols[7].strip(), cols[8], cols[9].strip(), cols[0], [], "mid",super_tok)
@@ -747,8 +782,8 @@ class DepEdit():
 				conll_tokens.append(this_tok)
 				if not super_tok:
 					sentlength += 1
-					children[str(int(cols[6]) + tokoffset)].append(tok_id)
-					child_funcs[(int(cols[6]) + tokoffset)].append(cols[7])
+					children[str(int(head_id) + tokoffset)].append(tok_id)
+					child_funcs[(int(head_id) + tokoffset)].append(cols[7])
 				else:
 					supertok_length += 1
 
@@ -779,7 +814,7 @@ if __name__ == "__main__":
 	files = glob(options.file)
 	for filename in files:
 		infile = io_open(filename, encoding="utf8")
-		output_trees = depedit.run_depedit(infile)
+		output_trees = depedit.run_depedit(infile,filename)
 		if len(files) == 1:
 			# Single file being processed, just print to STDOUT
 			if sys.version_info[0] < 3:
