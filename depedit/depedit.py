@@ -309,6 +309,11 @@ class DepEdit():
 			self.transformations = []
 			self.user_transformation_counter = 0
 		line_num = 0
+		if isinstance(config_file, str):
+			if sys.version_info[0] < 3:
+				config_file = open(config_file).readlines()
+			else:
+				config_file = open(config_file,encoding="utf8").readlines()
 		for instruction in config_file:
 			line_num += 1
 			if len(instruction)>0 and not instruction.startswith(";") and not instruction.startswith("#") and not instruction.strip() =="":
@@ -722,12 +727,17 @@ class DepEdit():
 								"\t"+tok_head_string+"\t"+tok.func+"\t"+tok.head2+"\t"+tok.func2+"\n"
 		return output_tree
 
-	def run_depedit(self, infile, filename="file"):
+	def make_sent_id(self, sent_id):
+		return "# sent_id = " + self.docname + "-" + str(sent_id) + "\n"
+
+	def run_depedit(self, infile, filename="file", sent_id=False, docname=False):
 		children = defaultdict(list)
 		child_funcs = defaultdict(list)
 		conll_tokens = []
 		self.input_mode = "10col"
+		self.docname = filename
 		tokoffset = 0
+		sent_num = 0
 		supertok_offset = 0
 		sentlength = 0
 		supertok_length = 0
@@ -743,6 +753,9 @@ class DepEdit():
 				conll_tokens[-1].position = "last"
 				transformed = self.process_sentence(conll_tokens, tokoffset, supertok_offset, self.transformations)
 				transformed = current_sentence.print_annos() + transformed
+				sent_num += 1
+				if sent_id:
+					my_output += self.make_sent_id(sent_num)
 				my_output += transformed
 				sentence_string = ""
 				current_sentence = Sentence()
@@ -752,7 +765,7 @@ class DepEdit():
 				sentlength = 0
 				supertok_length = 0
 			if myline.startswith("#"):  # Preserve comment lines
-					my_output += myline + "\n"
+					my_output += myline.strip() + "\n"
 			elif myline.strip() == "":
 					my_output += "\n"
 			elif myline.find("\t") > 0:  # Only process lines that contain tabs (i.e. conll tokens)
@@ -792,17 +805,33 @@ class DepEdit():
 			conll_tokens[-1].position = "last"
 			transformed = self.process_sentence(conll_tokens, tokoffset, supertok_offset, self.transformations)
 			transformed = current_sentence.print_annos() + transformed
+			sent_num += 1
+			if sent_id:
+				my_output += self.make_sent_id(sent_num)
 			my_output += transformed
+
+		if docname:
+			newdoc = '# newdoc id = ' + self.docname + "\n"
+			my_output = newdoc + my_output
 
 		return my_output
 
 if __name__ == "__main__":
 	depedit_version = "DepEdit V" + __version__
 	parser = argparse.ArgumentParser()
+	parser.add_argument('file',action="store",help="Input single file name or glob pattern to process a batch (e.g. *.conll10)")
 	parser.add_argument('-c', '--config', action="store", dest="config", default="config.ini", help="Configuration file defining transformation")
+	parser.add_argument('-d', '--docname', action="store_true", dest="docname", help="Begin output with # newdoc id =...")
+	parser.add_argument('-s', '--sent_id', action="store_true", dest="sent_id", help="Add running sentence ID comments")
+	group = parser.add_argument_group('Batch mode options')
+	group.add_argument('-o', '--outdir', action="store", dest="outdir", default="", help="Output directory in batch mode")
+	group.add_argument('-e', '--extension', action="store", dest="extension", default="", help="Extension for output files in batch mode")
+	group.add_argument('-i', '--infix', action="store", dest="infix", default=".depedit", help="Infix to denote edited files in batch mode (default: .depedit)")
 	parser.add_argument('--version', action='version', version=depedit_version)
-	parser.add_argument('file',action="store",help="Input file name or glob pattern to process")
 	options = parser.parse_args()
+
+	if options.extension.startswith("."):  # Ensure user specified extension does not include leading '.'
+		options.extension = options.extension[1:]
 
 	try:
 		config_file = io_open(options.config, encoding="utf8")
@@ -811,10 +840,19 @@ if __name__ == "__main__":
 		sys.exit()
 	depedit = DepEdit(config_file)
 
+	if sys.platform == "win32":  # Print \n new lines in Windows
+		import os, msvcrt
+		msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
+
 	files = glob(options.file)
 	for filename in files:
 		infile = io_open(filename, encoding="utf8")
-		output_trees = depedit.run_depedit(infile,filename)
+		basename = os.path.basename(filename)
+		if options.docname or options.sent_id:
+			docname = basename[:basename.rfind(".")]
+		else:
+			docname = filename
+		output_trees = depedit.run_depedit(infile,docname, sent_id=options.sent_id, docname=options.docname)
 		if len(files) == 1:
 			# Single file being processed, just print to STDOUT
 			if sys.version_info[0] < 3:
@@ -822,14 +860,26 @@ if __name__ == "__main__":
 			else:
 				print(output_trees)
 		else:
-			# Multiple files, add '.depedit' before extension and write to file
-			outname = filename
+			# Multiple files, add '.depedit' or other infix from options before extension and write to file
+			if options.outdir != "":
+				if not options.outdir.endswith(os.sep):
+					options.outdir += os.sep
+			outname = options.outdir + basename
 			if "." in filename:
 				extension = outname[outname.rfind(".")+1:]
+				if options.extension != "":
+					extension = options.extension
 				outname = outname[:outname.rfind(".")]
-				outname += ".depedit." + extension
+				outname += options.infix + "." + extension
 			else:
-				outname += ".depedit"
-			with open(outname,'w') as f:
-				f.write(output_trees.encode("utf-8"))
+				if options.extension == "":
+					outname += options.infix
+				else:
+					outname += options.infix + "." + options.extension
+			if sys.version_info[0] < 3:
+				with open(outname,'wb') as f:
+					f.write(output_trees.encode("utf-8"))
+			else:
+				with open(outname,'w',encoding="utf8") as f:
+					f.write(output_trees.encode("utf-8"))
 
