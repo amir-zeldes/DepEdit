@@ -19,7 +19,7 @@ from collections import defaultdict
 from glob import glob
 from six import iteritems
 
-__version__ = "DEVELOP"
+__version__ = "1.8.0"
 
 
 def escape(string,symbol_to_mask,border_marker):
