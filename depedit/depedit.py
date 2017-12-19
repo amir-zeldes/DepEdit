@@ -747,6 +747,10 @@ class DepEdit():
 		sentence_string = ""
 		current_sentence = Sentence()
 
+		# Check if DepEdit has been fed an unsplit string programmatically
+		if isinstance(infile,str):
+			infile = infile.split("\n")
+
 		for myline in infile:
 			if sentlength > 0 and "\t" not in myline:
 				current_sentence.length = sentlength
