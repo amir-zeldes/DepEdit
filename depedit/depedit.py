@@ -14,7 +14,7 @@ import argparse
 import re
 from io import open as io_open
 from copy import copy, deepcopy
-import sys
+import sys, os
 from collections import defaultdict
 from glob import glob
 from six import iteritems
