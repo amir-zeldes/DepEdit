@@ -19,7 +19,7 @@ from collections import defaultdict
 from glob import glob
 from six import iteritems
 
-__version__ = "2.1.0"
+__version__ = "2.1.1"
 
 
 def escape(string,symbol_to_mask,border_marker):
@@ -385,8 +385,8 @@ class DepEdit():
 		elif "==" in relation:
 			node1 = relation.split(operator)[0]
 			node2 = relation.split(operator)[1]
-			node1=float(node1.replace("#", ""))
-			node2=float(node2.replace("#", ""))
+			node1=int(node1.replace("#", ""))
+			node2=int(node2.replace("#", ""))
 
 			for matcher1 in node_matches[node1]:
 				tok1 = matcher1.token
@@ -409,8 +409,8 @@ class DepEdit():
 			node1 = relation.split(operator)[0]
 			node2 = relation.split(operator)[1]
 
-			node1=float(node1.replace("#", ""))
-			node2=float(node2.replace("#", ""))
+			node1=int(node1.replace("#", ""))
+			node2=int(node2.replace("#", ""))
 			for matcher1 in node_matches[node1]:
 				tok1 = matcher1.token
 				for matcher2 in node_matches[node2]:
@@ -719,9 +719,11 @@ class DepEdit():
 			else:
 				tok_head_string = str(float(tok.head)-tokoffset)
 				tok_id = str(float(tok.id)-tokoffset)
-			# Only keep decimal ID component for non-0 ellipsis IDs, e.g. 10.1
+			# Only keep decimal ID component for non-0 ellipsis IDs, e.g. 10.1 - those tokens have normal head '_'
 			tok_id = tok_id.replace(".0","")
 			tok_head_string = tok_head_string.replace(".0","")
+			if "." in tok_id:
+				tok_head_string = "_"
 			if self.input_mode == "8col":
 				output_tree += tok_id+"\t"+tok.text+"\t"+tok.lemma+"\t"+tok.pos+"\t"+tok.cpos+"\t"+tok.morph+\
 								"\t"+tok_head_string+"\t"+tok.func+"\n"
