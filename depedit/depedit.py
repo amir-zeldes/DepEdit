@@ -638,27 +638,33 @@ class DepEdit():
 							node_position = int(action[1:action.find(":")])
 							property = action[action.find(":")+1:action.find("=")]
 							value = action[action.find("=")+1:].strip()
-							group_num_match = re.search(r"(\$[0-9]+[LU]?)",value)
-							if group_num_match is not None:
-								no_dollar = group_num_match.groups(0)[0][1:]
-								case = ""
-								if no_dollar[-1] == "U":
-									case = "upper"
-									no_dollar = no_dollar[0:-1]
-								elif no_dollar[-1] == "L":
-									case = "lower"
-									no_dollar = no_dollar[0:-1]
-								group_num = int(no_dollar)
-								try:
-									group_value = result["groups"][group_num - 1]
+							group_num_matches = re.findall(r"(\$[0-9]+[LU]?)",value)
+							if group_num_matches is not None:
+								for g in group_num_matches:
+									no_dollar = g[1:]
+									case = ""
+									if no_dollar[-1] == "U":
+										case = "upper"
+										no_dollar = no_dollar[0:-1]
+									elif no_dollar[-1] == "L":
+										case = "lower"
+										no_dollar = no_dollar[0:-1]
+									group_num = int(no_dollar)
+									try:
+										group_value = result["groups"][group_num - 1]
+										if case == "lower":
+											group_value = group_value.lower()
+										elif case == "upper":
+											group_value = group_value.upper()
+									except IndexError:
+										sys.stderr.write("The action '" + action + "' refers to a missing regex bracket group '$" + str(group_num) + "'\n")
+										sys.exit()
+									group_str = str(group_num)
 									if case == "lower":
-										group_value = group_value.lower()
+										group_str += "L"
 									elif case == "upper":
-										group_value = group_value.upper()
-								except IndexError:
-									sys.stderr.write("The action '" + action + "' refers to a missing regex bracket group '$" + str(group_num) + "'\n")
-									sys.exit()
-								value = re.sub(r"\$[0-9]+[LR]?",group_value,value)
+										group_str += "U"
+									value = re.sub(r"\$"+group_str,group_value,value)
 							setattr(result[node_position],property,value)
 					else:  # Binary instruction
 						if ">" in action:  # Head relation
