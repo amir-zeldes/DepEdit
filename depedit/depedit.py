@@ -871,9 +871,9 @@ if __name__ == "__main__":
 		if len(files) == 1:
 			# Single file being processed, just print to STDOUT
 			if sys.version_info[0] < 3:
-				print(output_trees.encode("utf-8"))
+				print(output_trees.encode("utf-8"),end="")
 			else:
-				print(output_trees)
+				print(output_trees,end="")
 		else:
 			# Multiple files, add '.depedit' or other infix from options before extension and write to file
 			if options.outdir != "":
