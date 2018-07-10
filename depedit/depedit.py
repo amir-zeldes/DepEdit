@@ -290,9 +290,12 @@ class Match:
 
 class DepEdit():
 
-	def __init__(self, config_file=""):
+	def __init__(self, config_file="", options=None):
 		self.transformations = []
 		self.user_transformation_counter = 0
+		self.quiet = False
+		if options is not None:
+			self.quiet = options.quiet
 		if not config_file == "":
 			self.read_config_file(config_file)
 
@@ -794,7 +797,8 @@ class DepEdit():
 					super_tok = False
 					tok_id = str(float(cols[0]) + tokoffset)
 					if cols[6] == "_":
-						sys.stderr.write("DepEdit WARN: head not set for token " + tok_id + " in " + filename + "\n")
+						if not self.quiet:
+							sys.stderr.write("DepEdit WARN: head not set for token " + tok_id + " in " + filename + "\n")
 						head_id = str(0 + tokoffset)
 					else:
 						head_id = str(float(cols[6]) + tokoffset)
@@ -838,6 +842,7 @@ if __name__ == "__main__":
 	parser.add_argument('-c', '--config', action="store", dest="config", default="config.ini", help="Configuration file defining transformation")
 	parser.add_argument('-d', '--docname', action="store_true", dest="docname", help="Begin output with # newdoc id =...")
 	parser.add_argument('-s', '--sent_id', action="store_true", dest="sent_id", help="Add running sentence ID comments")
+	parser.add_argument('-q', '--quiet', action="store_true", dest="quiet", help="Do not output warnings and messages")
 	group = parser.add_argument_group('Batch mode options')
 	group.add_argument('-o', '--outdir', action="store", dest="outdir", default="", help="Output directory in batch mode")
 	group.add_argument('-e', '--extension', action="store", dest="extension", default="", help="Extension for output files in batch mode")
@@ -853,7 +858,7 @@ if __name__ == "__main__":
 	except IOError:
 		sys.stderr.write("\nConfiguration file not found (specify with -c or use the default 'config.ini')\n")
 		sys.exit()
-	depedit = DepEdit(config_file)
+	depedit = DepEdit(config_file=config_file,options=options)
 
 	if sys.platform == "win32":  # Print \n new lines in Windows
 		import os, msvcrt
