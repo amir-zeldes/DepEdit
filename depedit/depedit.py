@@ -19,7 +19,7 @@ from collections import defaultdict
 from glob import glob
 from six import iteritems
 
-__version__ = "2.1.1"
+__version__ = "2.1.2"
 
 
 def escape(string,symbol_to_mask,border_marker):
@@ -290,9 +290,12 @@ class Match:
 
 class DepEdit():
 
-	def __init__(self, config_file=""):
+	def __init__(self, config_file="", options=None):
 		self.transformations = []
 		self.user_transformation_counter = 0
+		self.quiet = False
+		if options is not None:
+			self.quiet = options.quiet
 		if not config_file == "":
 			self.read_config_file(config_file)
 
@@ -638,27 +641,33 @@ class DepEdit():
 							node_position = int(action[1:action.find(":")])
 							property = action[action.find(":")+1:action.find("=")]
 							value = action[action.find("=")+1:].strip()
-							group_num_match = re.search(r"(\$[0-9]+[LU]?)",value)
-							if group_num_match is not None:
-								no_dollar = group_num_match.groups(0)[0][1:]
-								case = ""
-								if no_dollar[-1] == "U":
-									case = "upper"
-									no_dollar = no_dollar[0:-1]
-								elif no_dollar[-1] == "L":
-									case = "lower"
-									no_dollar = no_dollar[0:-1]
-								group_num = int(no_dollar)
-								try:
-									group_value = result["groups"][group_num - 1]
+							group_num_matches = re.findall(r"(\$[0-9]+[LU]?)",value)
+							if group_num_matches is not None:
+								for g in group_num_matches:
+									no_dollar = g[1:]
+									case = ""
+									if no_dollar[-1] == "U":
+										case = "upper"
+										no_dollar = no_dollar[0:-1]
+									elif no_dollar[-1] == "L":
+										case = "lower"
+										no_dollar = no_dollar[0:-1]
+									group_num = int(no_dollar)
+									try:
+										group_value = result["groups"][group_num - 1]
+										if case == "lower":
+											group_value = group_value.lower()
+										elif case == "upper":
+											group_value = group_value.upper()
+									except IndexError:
+										sys.stderr.write("The action '" + action + "' refers to a missing regex bracket group '$" + str(group_num) + "'\n")
+										sys.exit()
+									group_str = str(group_num)
 									if case == "lower":
-										group_value = group_value.lower()
+										group_str += "L"
 									elif case == "upper":
-										group_value = group_value.upper()
-								except IndexError:
-									sys.stderr.write("The action '" + action + "' refers to a missing regex bracket group '$" + str(group_num) + "'\n")
-									sys.exit()
-								value = re.sub(r"\$[0-9]+[LR]?",group_value,value)
+										group_str += "U"
+									value = re.sub(r"\$"+group_str,group_value,value)
 							setattr(result[node_position],property,value)
 					else:  # Binary instruction
 						if ">" in action:  # Head relation
@@ -788,7 +797,8 @@ class DepEdit():
 					super_tok = False
 					tok_id = str(float(cols[0]) + tokoffset)
 					if cols[6] == "_":
-						sys.stderr.write("DepEdit WARN: head not set for token " + tok_id + " in " + filename + "\n")
+						if not self.quiet:
+							sys.stderr.write("DepEdit WARN: head not set for token " + tok_id + " in " + filename + "\n")
 						head_id = str(0 + tokoffset)
 					else:
 						head_id = str(float(cols[6]) + tokoffset)
@@ -832,6 +842,7 @@ if __name__ == "__main__":
 	parser.add_argument('-c', '--config', action="store", dest="config", default="config.ini", help="Configuration file defining transformation")
 	parser.add_argument('-d', '--docname', action="store_true", dest="docname", help="Begin output with # newdoc id =...")
 	parser.add_argument('-s', '--sent_id', action="store_true", dest="sent_id", help="Add running sentence ID comments")
+	parser.add_argument('-q', '--quiet', action="store_true", dest="quiet", help="Do not output warnings and messages")
 	group = parser.add_argument_group('Batch mode options')
 	group.add_argument('-o', '--outdir', action="store", dest="outdir", default="", help="Output directory in batch mode")
 	group.add_argument('-e', '--extension', action="store", dest="extension", default="", help="Extension for output files in batch mode")
@@ -847,7 +858,7 @@ if __name__ == "__main__":
 	except IOError:
 		sys.stderr.write("\nConfiguration file not found (specify with -c or use the default 'config.ini')\n")
 		sys.exit()
-	depedit = DepEdit(config_file)
+	depedit = DepEdit(config_file=config_file,options=options)
 
 	if sys.platform == "win32":  # Print \n new lines in Windows
 		import os, msvcrt
@@ -865,9 +876,9 @@ if __name__ == "__main__":
 		if len(files) == 1:
 			# Single file being processed, just print to STDOUT
 			if sys.version_info[0] < 3:
-				print(output_trees.encode("utf-8"))
+				print(output_trees.encode("utf-8"),end="")
 			else:
-				print(output_trees)
+				print(output_trees,end="")
 		else:
 			# Multiple files, add '.depedit' or other infix from options before extension and write to file
 			if options.outdir != "":
