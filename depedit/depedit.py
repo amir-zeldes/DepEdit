@@ -59,10 +59,11 @@ class ParsedToken:
 
 class Sentence:
 
-    def __init__(self, sentence_string=""):
+    def __init__(self, sentence_string="", sent_num=0):
         self.sentence_string = sentence_string
         self.length = 0
         self.annotations = {}
+        self.sent_num = 0
 
     def print_annos(self):
         return ["# " + key + "=" + val for (key, val) in iteritems(self.annotations)]
@@ -301,11 +302,11 @@ class DepEdit:
             print(trans_report, file=sys.stderr)
             sys.exit()
 
-    def process_sentence(self, conll_tokens, tokoffset, supertok_offset, transformations):
-        for transformation in transformations:
+    def process_sentence(self, conll_tokens):
+        for transformation in self.transformations:
             node_matches = defaultdict(list)
             for def_matcher in transformation.definitions:
-                for token in conll_tokens[tokoffset + supertok_offset + 1:]:
+                for token in conll_tokens:
                     if not token.is_super_tok:
                         if def_matcher.match(token):
                             node_matches[def_matcher.def_index].append(
@@ -320,8 +321,7 @@ class DepEdit:
                 for action in transformation.actions:
                     retval = self.execute_action(result_sets, action)
                     if retval == "last":  # Explicit instruction to cease processing
-                        return self.serialize_output_tree(conll_tokens[tokoffset + supertok_offset + 1:], tokoffset)
-        return self.serialize_output_tree(conll_tokens[tokoffset + supertok_offset + 1:], tokoffset)
+                        return
 
     def matches_relation(self, node_matches, relation, result_sets):
         if not relation:
@@ -684,15 +684,26 @@ class DepEdit:
         return "# sent_id = " + self.docname + "-" + str(sent_id)
 
     def run_depedit(self, infile, filename="file", sent_id=False, docname=False):
+
         children = defaultdict(list)
         child_funcs = defaultdict(list)
         conll_tokens = [0]
         self.input_mode = "10col"
         self.docname = filename
-        tokoffset = sent_num = supertok_offset = sentlength = supertok_length = 0
+        tokoffset = supertok_offset = sentlength = supertok_length = 0
         output_lines = []
         sentence_lines = []
-        current_sentence = Sentence()
+        current_sentence = Sentence(sent_num=1)
+
+        def _process_sentence():
+            current_sentence.length = sentlength
+            conll_tokens[-1].position = "last"
+            sentence_tokens = conll_tokens[tokoffset + supertok_offset + 1:]
+            self.process_sentence(sentence_tokens)
+            transformed = current_sentence.print_annos() + self.serialize_output_tree(sentence_tokens, tokoffset)
+            output_lines.extend(transformed)
+            if sent_id:
+                output_lines.append(self.make_sent_id(current_sentence.sent_num))
 
         # Check if DepEdit has been fed an unsplit string programmatically
         if isinstance(infile, str):
@@ -701,16 +712,9 @@ class DepEdit:
         for myline in infile:
             myline = myline.strip()
             if sentlength and "\t" not in myline:
-                current_sentence.length = sentlength
-                conll_tokens[-1].position = "last"
-                transformed = self.process_sentence(conll_tokens, tokoffset, supertok_offset, self.transformations)
-                transformed = current_sentence.print_annos() + transformed
-                sent_num += 1
-                if sent_id:
-                    output_lines.append(self.make_sent_id(sent_num))
-                output_lines += transformed
+                _process_sentence()
                 sentence_lines = []
-                current_sentence = Sentence()
+                current_sentence = Sentence(sent_num=current_sentence.sent_num + 1)
                 if sentlength:
                     tokoffset += sentlength
                     supertok_offset += supertok_length
@@ -758,14 +762,7 @@ class DepEdit:
                     child_funcs[(float(head_id) + tokoffset)].append(cols[7])
 
         if sentlength:  # Possible final sentence without trailing new line
-            current_sentence.length = sentlength
-            conll_tokens[-1].position = "last"
-            transformed = self.process_sentence(conll_tokens, tokoffset, supertok_offset, self.transformations)
-            transformed = current_sentence.print_annos() + transformed
-            sent_num += 1
-            if sent_id:
-                output_lines.append(self.make_sent_id(sent_num))
-            output_lines += transformed
+            _process_sentence()
 
         if docname:
             newdoc = '# newdoc id = ' + self.docname
