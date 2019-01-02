@@ -288,9 +288,9 @@ class DepEdit:
                 config_file = open(config_file).readlines()
             else:
                 config_file = open(config_file, encoding="utf8").readlines()
-        for line_num, instruction in enumerate(config_file, start=1):
-            if instruction.strip() and not instruction.startswith(";") and not instruction.startswith("#"):
-                self.transformations.append(Transformation(instruction, line_num))
+        self.transformations += [Transformation(instruction, line_num)
+                                 for line_num, instruction in enumerate(config_file, start=1)
+                                 if instruction.strip() and not instruction.startswith((";", "#"))]
 
         trans_report = ""
         for transformation in self.transformations:
@@ -307,10 +307,9 @@ class DepEdit:
             node_matches = defaultdict(list)
             for def_matcher in transformation.definitions:
                 for token in conll_tokens:
-                    if not token.is_super_tok:
-                        if def_matcher.match(token):
-                            node_matches[def_matcher.def_index].append(
-                                Match(def_matcher.def_index, token, def_matcher.groups))
+                    if not token.is_super_tok and def_matcher.match(token):
+                        node_matches[def_matcher.def_index].append(
+                            Match(def_matcher.def_index, token, def_matcher.groups))
             result_sets = []
             for relation in transformation.relations:
                 if not self.matches_relation(node_matches, relation, result_sets):
@@ -715,11 +714,9 @@ class DepEdit:
                 _process_sentence()
                 sentence_lines = []
                 current_sentence = Sentence(sent_num=current_sentence.sent_num + 1)
-                if sentlength:
-                    tokoffset += sentlength
-                    supertok_offset += supertok_length
-                sentlength = 0
-                supertok_length = 0
+                tokoffset += sentlength
+                supertok_offset += supertok_length
+                sentlength = supertok_length = 0
             if myline.startswith("#"):  # Preserve comment lines unless kill requested
                 if self.kill not in ["comments", "both"]:
                     output_lines.append(myline)
