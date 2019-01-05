@@ -1,2 +1,2 @@
 ## DepEdit init ##
-from depedit import DepEdit
+from .depedit import DepEdit
