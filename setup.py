@@ -3,7 +3,7 @@ from distutils.core import setup
 setup(
   name = 'depedit',
   packages = ['depedit'],
-  version = '2.1.2',
+  version = '2.1.3',
   description = 'A simple configurable tool for manipulating dependency trees',
   author = 'Amir Zeldes',
   author_email = 'amir.zeldes@georgetown.edu',

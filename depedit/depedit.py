@@ -19,7 +19,7 @@ from collections import defaultdict
 from glob import glob
 from six import iteritems
 
-__version__ = "2.1.2"
+__version__ = "2.1.3"
 
 
 def escape(string,symbol_to_mask,border_marker):
@@ -294,8 +294,13 @@ class DepEdit():
 		self.transformations = []
 		self.user_transformation_counter = 0
 		self.quiet = False
+		self.kill = None
 		if options is not None:
-			self.quiet = options.quiet
+			if "quiet" in options.__dict__ or options.quiet is not None:
+				self.quiet = options.quiet
+			if "kill" in options.__dict__ or options.kill is not None:
+				if options.kill in ["supertoks","comments","both"]:
+					self.kill = options.kill
 		if not config_file == "":
 			self.read_config_file(config_file)
 
@@ -720,6 +725,8 @@ class DepEdit():
 		output_tree = ""
 		for tok in tokens:
 			if tok.is_super_tok:
+				if self.kill in ["both","supertoks"]:
+					continue
 				tok_head_string = tok.head
 				tok_id = tok.id
 			elif tok.head == "0":
@@ -782,10 +789,11 @@ class DepEdit():
 					supertok_offset += supertok_length
 				sentlength = 0
 				supertok_length = 0
-			if myline.startswith("#"):  # Preserve comment lines
+			if myline.startswith("#"):  # Preserve comment lines unless kill requested
+				if self.kill not in ["comments","both"]:
 					my_output += myline.strip() + "\n"
 			elif myline.strip() == "":
-					my_output += "\n"
+				my_output += "\n"
 			elif myline.find("\t") > 0:  # Only process lines that contain tabs (i.e. conll tokens)
 				sentence_string += myline
 				cols = myline.split("\t")
@@ -842,6 +850,7 @@ if __name__ == "__main__":
 	parser.add_argument('-c', '--config', action="store", dest="config", default="config.ini", help="Configuration file defining transformation")
 	parser.add_argument('-d', '--docname', action="store_true", dest="docname", help="Begin output with # newdoc id =...")
 	parser.add_argument('-s', '--sent_id', action="store_true", dest="sent_id", help="Add running sentence ID comments")
+	parser.add_argument('-k', '--kill', action="store", choices=["supertoks","comments","both"], help="Remove supertokens or commments from output")
 	parser.add_argument('-q', '--quiet', action="store_true", dest="quiet", help="Do not output warnings and messages")
 	group = parser.add_argument_group('Batch mode options')
 	group.add_argument('-o', '--outdir', action="store", dest="outdir", default="", help="Output directory in batch mode")
