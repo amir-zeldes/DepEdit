@@ -581,7 +581,8 @@ class DepEdit:
 			sorted_matchers = sorted(result["matchers"], key=lambda x: x.def_index)
 			for matcher in sorted_matchers:
 				for group in matcher.groups:
-					groups.append(group[0])
+					for g in group:
+						groups.append(g)
 			result["groups"] = groups[:]
 
 	@staticmethod
