@@ -12,6 +12,7 @@ Author: Amir Zeldes
 from __future__ import print_function
 
 import argparse
+import os
 import re
 import sys
 from collections import defaultdict
@@ -801,7 +802,6 @@ def main(options):
 		sys.exit()
 	depedit = DepEdit(config_file=config_file, options=options)
 	if sys.platform == "win32":  # Print \n new lines in Windows
-		import os
 		import msvcrt
 		msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
 	files = glob(options.file)
