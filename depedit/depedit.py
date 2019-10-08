@@ -18,13 +18,13 @@ import sys
 from collections import defaultdict
 from copy import copy, deepcopy
 from glob import glob
-from io import open as io_open
-
+import io
 from six import iteritems
 
-__version__ = "2.1.4"
+__version__ = "2.1.5"
 
-ALIASES = {"form":"text", "upostag":"pos","xpostag":"cpos","feats":"morph","deprel":"func","deps":"head2","misc":"func2"}
+ALIASES = {"form":"text","upostag":"pos","xpostag":"cpos","feats":"morph","deprel":"func","deps":"head2","misc":"func2",
+		   "xpos": "cpos","upos":"pos"}
 
 def escape(string, symbol_to_mask, border_marker):
 	inside = False
@@ -118,6 +118,9 @@ class Transformation:
 			sys.exit()
 		self.definitions, self.relations, self.actions = instructions
 		self.line = line
+
+	def __repr__(self):
+		return " | ".join([str(self.definitions), str(self.relations), str(self.actions)])
 
 	def validate(self):
 		report = ""
@@ -306,8 +309,14 @@ class DepEdit:
 			sys.stderr.write(trans_report)
 			sys.exit()
 
-	def process_sentence(self, conll_tokens):
-		for transformation in self.transformations:
+	def process_sentence(self, conll_tokens, stepwise=False):
+		for i, transformation in enumerate(self.transformations):
+			if stepwise:
+				if sys.version_info[0] < 3:
+					print(("# Rule " + str(i+1) + ": " + str(transformation)+"\n").encode("utf-8"),end="")
+				else:
+					print("# Rule " + str(i+1) + ": " + str(transformation)+'\n',end="")
+
 			node_matches = defaultdict(list)
 			for def_matcher in transformation.definitions:
 				for token in conll_tokens:
@@ -324,6 +333,8 @@ class DepEdit:
 					retval = self.execute_action(result_sets, action)
 					if retval == "last":  # Explicit instruction to cease processing
 						return
+			if stepwise:
+				print("\n".join(self.serialize_output_tree(conll_tokens, 0))+"\n")
 
 	def matches_relation(self, node_matches, relation, result_sets):
 		if len(relation) == 0:
@@ -706,7 +717,7 @@ class DepEdit:
 	def make_sent_id(self, sent_id):
 		return "# sent_id = " + self.docname + "-" + str(sent_id)
 
-	def run_depedit(self, infile, filename="file", sent_id=False, docname=False):
+	def run_depedit(self, infile, filename="file", sent_id=False, docname=False, stepwise=False):
 
 		children = defaultdict(list)
 		child_funcs = defaultdict(list)
@@ -718,11 +729,11 @@ class DepEdit:
 		sentence_lines = []
 		current_sentence = Sentence(sent_num=1)
 
-		def _process_sentence():
+		def _process_sentence(stepwise=False):
 			current_sentence.length = sentlength
 			conll_tokens[-1].position = "last"
 			sentence_tokens = conll_tokens[tokoffset + supertok_offset + 1:]
-			self.process_sentence(sentence_tokens)
+			self.process_sentence(sentence_tokens,stepwise=stepwise)
 			transformed = current_sentence.print_annos() + self.serialize_output_tree(sentence_tokens, tokoffset)
 			output_lines.extend(transformed)
 			if sent_id:
@@ -735,7 +746,7 @@ class DepEdit:
 		for myline in infile:
 			myline = myline.strip()
 			if sentlength > 0 and "\t" not in myline:
-				_process_sentence()
+				_process_sentence(stepwise=stepwise)
 				sentence_lines = []
 				current_sentence = Sentence(sent_num=current_sentence.sent_num + 1)
 				tokoffset += sentlength
@@ -783,7 +794,7 @@ class DepEdit:
 					child_funcs[(float(head_id) + tokoffset)].append(cols[7])
 
 		if sentlength > 0:  # Possible final sentence without trailing new line
-			_process_sentence()
+			_process_sentence(stepwise=stepwise)
 
 		if docname:
 			newdoc = '# newdoc id = ' + self.docname
@@ -796,7 +807,7 @@ def main(options):
 	if options.extension.startswith("."):  # Ensure user specified extension does not include leading '.'
 		options.extension = options.extension[1:]
 	try:
-		config_file = io_open(options.config, encoding="utf8")
+		config_file = io.open(options.config, encoding="utf8")
 	except IOError:
 		sys.stderr.write("\nConfiguration file not found (specify with -c or use the default 'config.ini')\n")
 		sys.exit()
@@ -806,16 +817,16 @@ def main(options):
 		msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
 	files = glob(options.file)
 	for filename in files:
-		infile = io_open(filename, encoding="utf8")
+		infile = io.open(filename, encoding="utf8")
 		basename = os.path.basename(filename)
 		docname = basename[:basename.rfind(".")] if options.docname or options.sent_id else filename
-		output_trees = depedit.run_depedit(infile, docname, sent_id=options.sent_id, docname=options.docname)
+		output_trees = depedit.run_depedit(infile, docname, sent_id=options.sent_id, docname=options.docname, stepwise=options.stepwise)
 		if len(files) == 1:
 			# Single file being processed, just print to STDOUT
 			if sys.version_info[0] < 3:
-				print(output_trees.encode("utf-8"),end="")
+				print(output_trees.encode("utf-8"))
 			else:
-				print(output_trees,end="")
+				sys.stdout.buffer.write(output_trees.encode("utf8"))
 		else:
 			# Multiple files, add '.depedit' or other infix from options before extension and write to file
 			if options.outdir != "":
@@ -831,11 +842,11 @@ def main(options):
 			else:
 				outname += options.infix + "." + options.extension if options.extension else options.infix
 			if sys.version_info[0] < 3:
-				with open(outname, 'wb') as f:
+				with io.open(outname, 'wb') as f:
 					f.write(output_trees.encode("utf-8"))
 			else:
-				with open(outname, 'w', encoding="utf8") as f:
-					f.write(output_trees.encode("utf-8"))
+				with io.open(outname, 'w', encoding="utf8", newline="\n") as f:
+					f.write(output_trees)
 
 
 if __name__ == "__main__":
@@ -851,6 +862,7 @@ if __name__ == "__main__":
 	parser.add_argument('-k', '--kill', action="store", choices=["supertoks", "comments", "both"],
 						help="Remove supertokens or commments from output")
 	parser.add_argument('-q', '--quiet', action="store_true", dest="quiet", help="Do not output warnings and messages")
+	parser.add_argument('--stepwise', action="store_true", help="Output sentence repeatedly after each step (useful for debugging)")
 	group = parser.add_argument_group('Batch mode options')
 	group.add_argument('-o', '--outdir', action="store", dest="outdir", default="",
 					   help="Output directory in batch mode")
