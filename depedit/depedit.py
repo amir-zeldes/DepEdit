@@ -21,7 +21,7 @@ from glob import glob
 import io
 from six import iteritems
 
-__version__ = "2.1.5"
+__version__ = "2.1.6"
 
 ALIASES = {"form":"text","upostag":"pos","xpostag":"cpos","feats":"morph","deprel":"func","deps":"head2","misc":"func2",
 		   "xpos": "cpos","upos":"pos"}
@@ -704,6 +704,8 @@ class DepEdit:
 				tok_head_string = str(float(tok.head) - tokoffset)
 				tok_id = str(float(tok.id) - tokoffset)
 			# Only keep decimal ID component for non-0 ellipsis IDs, e.g. 10.1 - those tokens have normal head '_'
+			if "." in tok_id:
+				tok_id = tok_id[:tok_id.index(".")+2]  # At most one decimal place
 			tok_id = tok_id.replace(".0", "")
 			tok_head_string = tok_head_string.replace(".0", "")
 			if "." in tok_id:
