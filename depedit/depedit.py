@@ -15,6 +15,7 @@ import argparse
 import os
 import re
 import sys
+from decimal import Decimal
 from collections import defaultdict
 from copy import copy, deepcopy
 from glob import glob
@@ -699,13 +700,10 @@ class DepEdit:
 				tok_id = tok.id
 			elif tok.head == "0":
 				tok_head_string = "0"
-				tok_id = str(float(tok.id) - tokoffset)
+				tok_id = str(Decimal(tok.id) - tokoffset)
 			else:
-				tok_head_string = str(float(tok.head) - tokoffset)
-				tok_id = str(float(tok.id) - tokoffset)
-			# Only keep decimal ID component for non-0 ellipsis IDs, e.g. 10.1 - those tokens have normal head '_'
-			if "." in tok_id:
-				tok_id = tok_id[:tok_id.index(".")+2]  # At most one decimal place
+				tok_head_string = str(Decimal(tok.head) - tokoffset)
+				tok_id = str(Decimal(tok.id) - tokoffset)
 			tok_id = tok_id.replace(".0", "")
 			tok_head_string = tok_head_string.replace(".0", "")
 			if "." in tok_id:
