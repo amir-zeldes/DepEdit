@@ -15,13 +15,14 @@ import argparse
 import os
 import re
 import sys
+from decimal import Decimal
 from collections import defaultdict
 from copy import copy, deepcopy
 from glob import glob
 import io
 from six import iteritems
 
-__version__ = "2.1.5"
+__version__ = "2.1.6"
 
 ALIASES = {"form":"text","upostag":"pos","xpostag":"cpos","feats":"morph","deprel":"func","deps":"head2","misc":"func2",
 		   "xpos": "cpos","upos":"pos"}
@@ -699,11 +700,10 @@ class DepEdit:
 				tok_id = tok.id
 			elif tok.head == "0":
 				tok_head_string = "0"
-				tok_id = str(float(tok.id) - tokoffset)
+				tok_id = str(Decimal(tok.id) - tokoffset)
 			else:
-				tok_head_string = str(float(tok.head) - tokoffset)
-				tok_id = str(float(tok.id) - tokoffset)
-			# Only keep decimal ID component for non-0 ellipsis IDs, e.g. 10.1 - those tokens have normal head '_'
+				tok_head_string = str(Decimal(tok.head) - tokoffset)
+				tok_id = str(Decimal(tok.id) - tokoffset)
 			tok_id = tok_id.replace(".0", "")
 			tok_head_string = tok_head_string.replace(".0", "")
 			if "." in tok_id:
@@ -743,7 +743,9 @@ class DepEdit:
 		if isinstance(infile, str):
 			infile = infile.splitlines()
 
+		in_data = []
 		for myline in infile:
+			in_data.append(myline)
 			myline = myline.strip()
 			if sentlength > 0 and "\t" not in myline:
 				_process_sentence(stepwise=stepwise)
@@ -800,7 +802,11 @@ class DepEdit:
 			newdoc = '# newdoc id = ' + self.docname
 			output_lines.insert(0, newdoc)
 
-		return "\n".join(output_lines)
+		# Trailing whitespace
+		rev = "".join(in_data)[::-1]
+		white = re.match(r'\s*',rev).group()
+
+		return "\n".join(output_lines).strip() + white
 
 
 def main(options):
