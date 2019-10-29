@@ -743,7 +743,9 @@ class DepEdit:
 		if isinstance(infile, str):
 			infile = infile.splitlines()
 
+		in_data = []
 		for myline in infile:
+			in_data.append(myline)
 			myline = myline.strip()
 			if sentlength > 0 and "\t" not in myline:
 				_process_sentence(stepwise=stepwise)
@@ -800,7 +802,11 @@ class DepEdit:
 			newdoc = '# newdoc id = ' + self.docname
 			output_lines.insert(0, newdoc)
 
-		return "\n".join(output_lines)
+		# Trailing whitespace
+		rev = "".join(in_data)[::-1]
+		white = re.match(r'\s*',rev).group()
+
+		return "\n".join(output_lines).strip() + white
 
 
 def main(options):
