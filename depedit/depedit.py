@@ -22,7 +22,7 @@ from glob import glob
 import io
 from six import iteritems
 
-__version__ = "2.1.6"
+__version__ = "2.1.7"
 
 ALIASES = {"form":"text","upostag":"pos","xpostag":"cpos","feats":"morph","deprel":"func","deps":"head2","misc":"func2",
 		   "xpos": "cpos","upos":"pos"}
@@ -61,11 +61,12 @@ class ParsedToken:
 
 class Sentence:
 
-	def __init__(self, sentence_string="", sent_num=0):
+	def __init__(self, sentence_string="", sent_num=0,tokoffset=0):
 		self.sentence_string = sentence_string
 		self.length = 0
 		self.annotations = {}
 		self.sent_num = sent_num
+		self.offset = tokoffset
 
 	def print_annos(self):
 		return ["# " + key + "=" + val for (key, val) in iteritems(self.annotations)]
@@ -129,7 +130,7 @@ class Transformation:
 			node = escape(definition.def_text, "&", "/")
 			criteria = (_crit.replace("%%%%%", "&") for _crit in node.split("&"))
 			for criterion in criteria:
-				if re.match(r"(text|pos|cpos|lemma|morph|func|head|func2|head2|num|form|upostag|xpostag|feats|deprel|deps|misc)!?=/[^/=]*/", criterion) is None:
+				if re.match(r"(text|pos|cpos|lemma|morph|func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc)!?=/[^/=]*/", criterion) is None:
 					if re.match(r"position!?=/(first|last|mid)/", criterion) is None:
 						report += "Invalid node definition in column 1: " + criterion
 		for relation in self.relations:
@@ -144,13 +145,13 @@ class Transformation:
 					criterion = criterion.strip()
 					# if not re.match(r"#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+",criterion):
 					if not re.match(r"(#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+|#[0-9]+:(text|pos|cpos|lemma|morph|"
-									r"func|head|func2|head2|num|form|upostag|xpostag|feats|deprel|deps|misc)==#[0-9]+)",
+									r"func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc)==#[0-9]+)",
 									criterion):
 						report += "Column 2 relation setting invalid criterion: " + criterion + "."
 		for action in self.actions:
 			commands = action.split(";")
 			for command in commands:  # Node action
-				if re.match(r"(#[0-9]+>#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|head|head2|func2|num|form|upostag|xpostag|feats|deprel|deps|misc)=[^;]*)$", command) is None:
+				if re.match(r"(#[0-9]+>#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|head|head2|func2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc)=[^;]*)$", command) is None:
 					if re.match(r"#S:[A-Za-z_]+=[A-Za-z_]+$|last$", command) is None:  # Sentence annotation action or quit
 						report += "Column 3 invalid action definition: " + command + " and the action was " + action
 		return report
@@ -188,6 +189,10 @@ class DefinitionMatcher:
 		potential_groups = []
 		for def_item in self.defs:
 			tok_value = getattr(token, def_item.criterion)
+			if def_item.criterion == "head":
+				tok_value = str(Decimal(tok_value) - token.sentence.offset)
+				if tok_value.endswith('.0'):
+					tok_value = tok_value.replace(".0","")
 			match_obj = def_item.match_func(def_item, tok_value)
 
 			if match_obj is None:
@@ -750,9 +755,9 @@ class DepEdit:
 			if sentlength > 0 and "\t" not in myline:
 				_process_sentence(stepwise=stepwise)
 				sentence_lines = []
-				current_sentence = Sentence(sent_num=current_sentence.sent_num + 1)
 				tokoffset += sentlength
 				supertok_offset += supertok_length
+				current_sentence = Sentence(sent_num=current_sentence.sent_num + 1,tokoffset=tokoffset)
 				sentlength = supertok_length = 0
 			if myline.startswith("#"):  # Preserve comment lines unless kill requested
 				if self.kill not in ["comments", "both"]:
