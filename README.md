@@ -45,4 +45,4 @@ Batch mode options:
                         .depedit)
 ```
 
-For more information see https://corpling.uis.georgetown.edu/depedit/ and read the included User Guide PDF.
+For more information see https://corpling.uis.georgetown.edu/depedit/ and read the included User Guide PDF in doc/.
