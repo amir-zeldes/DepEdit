@@ -321,6 +321,7 @@ class DepEdit:
 
 		line_num = 0
 		for instruction in config_file:
+			instruction = instruction.strip()
 			line_num += 1
 			if len(instruction)>0 and not instruction.startswith(";") and not instruction.startswith("#") \
 					or instruction.startswith("#S:"):
