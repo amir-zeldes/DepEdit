@@ -22,7 +22,7 @@ from glob import glob
 import io
 from six import iteritems
 
-__version__ = "2.2.0"
+__version__ = "2.2.0.1"
 
 ALIASES = {"form":"text","upostag":"pos","xpostag":"cpos","feats":"morph","deprel":"func","deps":"head2","misc":"func2",
 		   "xpos": "cpos","upos":"pos"}
@@ -321,6 +321,7 @@ class DepEdit:
 
 		line_num = 0
 		for instruction in config_file:
+			instruction = instruction.strip()
 			line_num += 1
 			if len(instruction)>0 and not instruction.startswith(";") and not instruction.startswith("#") \
 					or instruction.startswith("#S:"):
