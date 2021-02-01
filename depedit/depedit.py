@@ -50,6 +50,7 @@ class ParsedToken:
 		self.func = func
 		self.head2 = head2
 		self.func2 = func2
+		self.storage = ""  # Storage field for temporary values, never read or written to/from conllu
 		self.num = num
 		self.child_funcs = child_funcs
 		self.position = position
@@ -149,7 +150,7 @@ class Transformation:
 			node = escape(definition.def_text, "&", "/")
 			criteria = (_crit.replace("%%%%%", "&") for _crit in node.split("&"))
 			for criterion in criteria:
-				if re.match(r"(text|pos|cpos|lemma|morph|func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc)!?=/[^/=]*/", criterion) is None:
+				if re.match(r"(text|pos|cpos|lemma|morph|storage|func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc)!?=/[^/=]*/", criterion) is None:
 					if re.match(r"position!?=/(first|last|mid)/", criterion) is None:
 						if re.match(r"#S:[A-Za-z_]+!?=/[^/\t]+/",criterion) is None:
 							report += "Invalid node definition in column 1: " + criterion
@@ -164,14 +165,14 @@ class Transformation:
 				for criterion in criteria:
 					criterion = criterion.strip()
 					# if not re.match(r"#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+",criterion):
-					if not re.match(r"(#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+|#[0-9]+:(text|pos|cpos|lemma|morph|"
+					if not re.match(r"(#[0-9]+((>|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+|#[0-9]+:(text|pos|cpos|lemma|morph|storage|"
 									r"func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc)==#[0-9]+)",
 									criterion):
 						report += "Column 2 relation setting invalid criterion: " + criterion + "."
 		for action in self.actions:
 			commands = action.split(";")
 			for command in commands:  # Node action
-				if re.match(r"(#[0-9]+>#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|head|head2|func2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc)\+?=[^;]*)$", command) is None:
+				if re.match(r"(#[0-9]+>#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|storage|head|head2|func2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc)\+?=[^;]*)$", command) is None:
 					if re.match(r"#S:[A-Za-z_]+=[A-Za-z_]+$|last$", command) is None:  # Sentence annotation action or quit
 						report += "Column 3 invalid action definition: " + command + " and the action was " + action
 		return report
@@ -336,7 +337,7 @@ class DepEdit:
 				key = match_variable.group(1)
 				val = match_variable.group(2)
 				self.add_variable(key,val)
-			elif len(instruction)>0 and not instruction.startswith(";") and not instruction.startswith("#") \
+			elif len(instruction) > 0 and not instruction.startswith(";") and not instruction.startswith("#") \
 					or instruction.startswith("#S:"):
 					self.transformations.append(Transformation(instruction, line_num, self))
 
