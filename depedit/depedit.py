@@ -60,6 +60,7 @@ class ParsedToken:
 			except ValueError:
 				pass
 		self.storage = ""  # Storage field for temporary values, never read or written to/from conllu
+		self.storage2 = ""  # Storage field for temporary values, never read or written to/from conllu
 		self.num = num
 		self.child_funcs = child_funcs
 		self.position = position
@@ -164,7 +165,7 @@ class Transformation:
 			node = escape(definition.def_text, "&", "/")
 			criteria = (_crit.replace("%%%%%", "&") for _crit in node.split("&"))
 			for criterion in criteria:
-				if re.match(r"(text|pos|cpos|lemma|morph|storage|edom|func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)!?=/[^/=]*/", criterion) is None:
+				if re.match(r"(text|pos|cpos|lemma|morph|storage2?|edom|func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)!?=/[^/=]*/", criterion) is None:
 					if re.match(r"position!?=/(first|last|mid)/", criterion) is None:
 						if re.match(r"#S:[A-Za-z_]+!?=/[^/\t]+/",criterion) is None:
 							report += "Invalid node definition in column 1: " + criterion
@@ -178,14 +179,14 @@ class Transformation:
 				criteria = relation.split(";")
 				for criterion in criteria:
 					criterion = criterion.strip()
-					if not re.match(r"(#[0-9]+(([>~]|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+|#[0-9]+:(text|pos|cpos|lemma|morph|storage|edom|"
+					if not re.match(r"(#[0-9]+(([>~]|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+|#[0-9]+:(text|pos|cpos|lemma|morph|storage2?|edom|"
 									r"func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)==#[0-9]+)",
 									criterion):
 						report += "Column 2 relation setting invalid criterion: " + criterion + "."
 		for action in self.actions:
 			commands = action.split(";")
 			for command in commands:  # Node action
-				if re.match(r"(#[0-9]+[>~]#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|storage|edom|head|head2|func2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)\+?=[^;]*)$", command) is None:
+				if re.match(r"(#[0-9]+[>~]#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|storage2?|edom|head|head2|func2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)\+?=[^;]*)$", command) is None:
 					if re.match(r"#S:[A-Za-z_]+=[A-Za-z_]+$|last$|once$", command) is None:  # Sentence annotation action or quit
 						report += "Column 3 invalid action definition: " + command + " and the action was " + action
 						if "#" not in action:
