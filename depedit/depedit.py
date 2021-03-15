@@ -102,7 +102,8 @@ class Transformation:
 		definition_string, relation_string, action_string = split_trans
 		if "~#" in action_string and "edep=" not in action_string:
 			sys.stderr.write("WARN: action specifies enhanced edge (~) but no edep label on line " + str(line) + "\n")
-		elif "~#" not in action_string and "edep=" in action_string and not action_string.endswith("edep="):
+		elif "~#" not in action_string and "edep=" in action_string and not action_string.endswith("edep=") and \
+				not "edep=;" in action_string and not "ehead=" in action_string:
 			sys.stderr.write("WARN: action specifies an edep label but no enhanced edge (~) on line " + str(line) + "\n")
 		match_variables = re.findall(r'\{([^}]+)\}',definition_string)
 		for m in match_variables:
@@ -314,6 +315,7 @@ class Definition:
 	def return_regex_in(definition, test_val):
 		matchers = [definition.compiled_re.search(v) for v in test_val if v is not None]
 		successful = [m for m in matchers if m is not None]
+		successful.sort(key=lambda x: x.endpos - x.pos, reverse=True)
 		return successful[0] if len(successful) > 0 else None
 
 	@staticmethod
@@ -525,13 +527,13 @@ class DepEdit:
 			else:
 				return False
 		elif operator == ">":
-			if int(float(node2.head)) == int(float(node1.id)):
+			if float(node2.head) == float(node1.id):
 				return True
 			else:
 				return False
 		elif operator == "~":
 			try:
-				eheads = [int(float(e[0])) for e in node2.edep]
+				eheads = [int(float(e[0])) for e in node2.edep if e[0] is not None]  # ignore root edep
 				if int(float(node1.id)) in eheads:
 					return True
 				return False
@@ -795,6 +797,8 @@ class DepEdit:
 									result[node_position].edep.append(value.split("||", maxsplit=1))
 								else:
 									sys.stderr.write("WARN: skipped attempt to write edom; value does not follow the format HEAD||EDEP (e.g. 8.0||nsubj:xsubj)\n")
+							elif prop == "ehead":
+								result[node_position].edep.append([value, None])
 							else:
 								setattr(result[node_position], prop, value)
 					else:
@@ -876,7 +880,7 @@ class DepEdit:
 					sys.stderr.write(multi_edep_string + "\n")
 					return "|".join(sorted(parts))
 			try:
-				sorted_keys = sorted(iterkeys(d), key=lambda x: float(x))
+				sorted_keys = sorted(list(iterkeys(d)), key=lambda x: float(x))
 			except ValueError:
 				sys.stderr.write("WARN: Non-numeric enhanced head in column 9:\n")
 				sys.stderr.write(multi_edep_string + "\n")
@@ -903,6 +907,8 @@ class DepEdit:
 			else:
 				tok_ehead_string = [":".join([str(Decimal(ehead[0]) - tokoffset).replace(".0", ""),ehead[1]]) for ehead in tok.edep]
 				tok_ehead_string = "|".join(tok_ehead_string)
+				if "-" in tok_ehead_string:
+					tok_ehead_string = re.sub(r'-[0-9]+(?=:)', '0', tok_ehead_string)
 				tok_ehead_string = order_edep(tok_ehead_string)
 			tok_id = tok_id.replace(".0", "")
 			tok_head_string = tok_head_string.replace(".0", "")
