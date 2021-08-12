@@ -98,17 +98,26 @@ class Sentence:
 
 	def print_annos(self):
 		anno_dict = dict((k, v) for k, v in iteritems(self.annotations))
+		if "text" in self.input_annotations and "text" in self.annotations:
+			self.input_annotations["text"] = self.annotations["text"]
 		if self.depedit.kill not in ["comments", "both"]:
 			anno_dict.update(dict((k, v) for k, v in iteritems(self.input_annotations)))
 		sorted_keys = sorted(list(iterkeys(anno_dict)))
+		newdoc_anno = []
+		sent_id = []
 		if "sent_id" in sorted_keys:
 			# Ensure sent_id is first
+			sent_id = ["sent_id"]
 			sorted_keys.remove("sent_id")
-			sorted_keys = ["sent_id"] + sorted_keys
 		if "newdoc id" in sorted_keys:
 			# Ensure newdoc id is first
+			newdoc_anno = ["newdoc id"]
 			sorted_keys.remove("newdoc id")
-			sorted_keys = ["newdoc id"] + sorted_keys
+		global_specs = [k for k in sorted_keys if k.startswith("global.")]
+		meta = sorted([k for k in sorted_keys if k.startswith("meta::")])
+		others = [k for k in sorted_keys if not k.startswith("meta::") and not k.startswith("global.") and k != "text"]
+		text = ["text"] if "text" in sorted_keys else []
+		sorted_keys = newdoc_anno + global_specs + meta + sent_id + sorted(others) + text
 		return ["# " + key.strip() + " = " + anno_dict[key].strip() for key in sorted_keys]
 
 
