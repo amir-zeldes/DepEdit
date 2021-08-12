@@ -59,3 +59,19 @@ Batch mode options:
 ```
 
 For more information see https://corpling.uis.georgetown.edu/depedit/ and read the included User Guide PDF in doc/.
+
+## Citing
+
+If you are using DepEdit in a scholarly paper, please cite the following reference:
+
+```
+ @InProceedings{PengZeldes2020,
+   author    = {Siyao Peng and Amir Zeldes},
+   title     = {All Roads Lead to {UD}: Converting {S}tanford and {P}enn Parses to {E}nglish {U}niversal {D}ependencies with Multilayer Annotations},
+   booktitle = {Proceedings of the Joint Workshop on Linguistic Annotation, Multiword Expressions and Constructions ({LAW}-{MWE}-{C}x{G}-2018)},
+   year      = {2018},
+   pages     = {167--177},
+   address   = {Santa Fe, NM},
+   url       = {https://www.aclweb.org/anthology/W18-4918}
+ }
+ ```
