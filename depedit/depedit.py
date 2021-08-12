@@ -161,6 +161,8 @@ class Transformation:
 	def handle_aliases(orig_action):
 		for source, target in iteritems(ALIASES):
 			orig_action = orig_action.replace(":" + source + "=", ":" + target + "=")
+			orig_action = orig_action.replace(":" + source + "+=", ":" + target + "+=")
+			orig_action = orig_action.replace(":" + source + "-=", ":" + target + "-=")
 		return orig_action
 
 	@staticmethod
@@ -213,7 +215,7 @@ class Transformation:
 		for action in self.actions:
 			commands = action.split(";")
 			for command in commands:  # Node action
-				if re.match(r"(#[0-9]+([>~]|><)#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|storage2?|edom|head|head2|func2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)\+?=[^;]*)$", command) is None:
+				if re.match(r"(#[0-9]+([>~]|><)#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|storage2?|edom|head|head2|func2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)[\+-]?=[^;]*)$", command) is None:
 					if re.match(r"#S:[A-Za-z_]+=[A-Za-z_]+$|last$|once$", command) is None:  # Sentence annotation action or quit
 						report += "Column 3 invalid action definition: " + command + " and the action was " + action
 						if "#" not in action:
@@ -797,8 +799,12 @@ class DepEdit:
 							prop = action[action.find(":") + 1:action.find("=")]
 							value = action[action.find("=") + 1:].strip()
 							add_val = False
+							subtract_val = False
 							if prop.endswith("+"):  # Add annotation, e.g. feats+=...
 								add_val = True
+								prop = prop[:-1]
+							elif prop.endswith("-"):  # Remove annotation, e.g. feats-=...
+								subtract_val = True
 								prop = prop[:-1]
 							group_num_matches = re.findall(r"(\$[0-9]+[LU]?)", value)
 							if group_num_matches is not None:
@@ -841,6 +847,20 @@ class DepEdit:
 									value = "|".join(sorted(kv,key=lambda x:x.lower()))
 								else:
 									value = "|".join(new_vals)
+							elif subtract_val:
+								old_val = getattr(result[node_position],prop)
+								new_vals = sorted(value.split("|"))
+								new_vals_keys = [v.split("=")[0] for v in new_vals]
+								if old_val != "_":  # Some values already exist
+									kv = []
+									for ov in sorted(old_val.split("|")):
+										if not ov.split("=")[0] in new_vals_keys:  # Else this needs to be overwritten
+											kv.append(ov)
+									value = "|".join(sorted(kv,key=lambda x:x.lower()))
+									if value == "":
+										value = "_"
+								else:
+									value = "_"
 							if prop == "edep":
 								if value == "":  # Set empty edep
 									result[node_position].edep = []
