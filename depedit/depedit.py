@@ -973,7 +973,9 @@ class DepEdit:
 			else:
 				tok_head_string = str(Decimal(tok.head) - tokoffset)
 				tok_id = str(Decimal(tok.id) - tokoffset)
-			if len(tok.edep) == 0:
+			if tok.head2 not in ["","_"]:  # explicitly set head2 field
+				tok_ehead_string = tok.head2
+			elif len(tok.edep) == 0:
 				tok_ehead_string = "_"
 				tok.head2 = "_"
 			else:
