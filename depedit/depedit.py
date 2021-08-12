@@ -56,9 +56,11 @@ class ParsedToken:
 		self.func2 = func2
 		if ":" in head2:  # edep format
 			try:
-				h, d = head2.split(":", maxsplit=1)
-				h = str(float(h) + tokoffset)
-				self.edep.append([h, d])
+				edeps = head2.split("|")
+				for edep in edeps:
+					h, d = edep.split(":", maxsplit=1)
+					h = str(float(h) + tokoffset)
+					self.edep.append([h, d])
 			except ValueError:
 				pass
 		self.storage = ""  # Storage field for temporary values, never read or written to/from conllu
@@ -846,7 +848,16 @@ class DepEdit:
 									result[node_position].edep[index][1] = value
 							elif prop == "edom":
 								if "||" in value:
-									result[node_position].edep.append(value.split("||", maxsplit=1))
+									h, rel = value.split("||", maxsplit=1)
+									new_rels = []
+									for dom in result[node_position].edep:
+										if dom[0] != h:  # Leave out any existing edeps with the same head unless they are substrings
+											new_rels.append(dom)
+										elif dom[1].startswith(rel) or rel.startswith(dom[1]):
+											new_rels.append(dom)
+									new_rels.append([h, rel])
+									#result[node_position].edep.append([h, rel])
+									result[node_position].edep = new_rels
 								else:
 									sys.stderr.write("WARN: skipped attempt to write edom; value does not follow the format HEAD||EDEP (e.g. 8.0||nsubj:xsubj)\n")
 							elif prop == "ehead":
