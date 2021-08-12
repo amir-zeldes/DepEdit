@@ -40,6 +40,8 @@ def escape(string, symbol_to_mask, border_marker):
 
 
 class ParsedToken:
+	__slots__ = ['id', 'text', 'lemma', 'pos', 'cpos', 'morph', 'head', 'func', 'edep', 'head2', 'func2', 'storage', 'storage2', 'num', 'child_funcs', 'position', 'is_super_tok', 'sentence']
+
 	def __init__(self, tok_id, text, lemma, pos, cpos, morph, head, func, head2, func2, num, child_funcs, position, is_super_tok=False, tokoffset=0):
 		self.id = tok_id
 		self.text = text
@@ -81,6 +83,7 @@ class ParsedToken:
 
 
 class Sentence:
+	__slots__ = ['sentence_string','length','annotations','input_annotations','sent_num','offset','depedit']
 
 	def __init__(self, sentence_string="", sent_num=0, tokoffset=0, depedit_object=None):
 		self.sentence_string = sentence_string
@@ -208,6 +211,7 @@ class Transformation:
 
 
 class DefinitionMatcher:
+	__slots__ = ['def_text','def_index','groups','defs','sent_def']
 
 	def __init__(self, def_text, def_index):
 		self.def_text = escape(def_text, "&", "/")
@@ -270,6 +274,7 @@ class DefinitionMatcher:
 
 
 class Definition:
+	__slots__ = ['value','match_type','compiled_re','match_func','negative','criterion']
 
 	def __init__(self, criterion, value, negative=False):
 		# Handle conllu criterion aliases:
@@ -342,6 +347,7 @@ class Definition:
 
 
 class Match:
+	__slots__ = ['def_index','token','groups','sent_def']
 
 	def __init__(self, def_index, token, groups):
 		self.def_index = def_index
