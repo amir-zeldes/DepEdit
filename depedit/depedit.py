@@ -22,7 +22,7 @@ from glob import glob
 import io
 from six import iteritems, iterkeys
 
-__version__ = "3.2.0.0"
+__version__ = "3.2.1.0"
 
 ALIASES = {"form":"text","upostag":"pos","xpostag":"cpos","feats":"morph","deprel":"func","deps":"head2","misc":"func2",
            "xpos": "cpos","upos":"pos"}
@@ -875,6 +875,10 @@ class DepEdit:
                                     except IndexError:  # All are filled, overwrite top of stack
                                         index = -1
                                     result[node_position].edep[index][1] = value
+                                    # Remove all other edeps connecting the same two tokens
+                                    this_edep_parent = result[node_position].edep[index][0]
+                                    result[node_position].edep = [x for x in result[node_position].edep if x[0] != this_edep_parent or x[1] == value]
+                                    result[node_position].head2 = "_"  # Remove any explicit head2 info to accommodate new edeps; it will be generated from edom
                             elif prop == "edom":
                                 if "||" in value:
                                     h, rel = value.split("||", maxsplit=1)
