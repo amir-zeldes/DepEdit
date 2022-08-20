@@ -58,7 +58,7 @@ Batch mode options:
                         .depedit)
 ```
 
-For more information see https://corpling.uis.georgetown.edu/depedit/ and read the included User Guide PDF in doc/.
+For more information see https://gucorpling.org/depedit/ and read the included User Guide PDF in doc/.
 
 ## Citing
 
