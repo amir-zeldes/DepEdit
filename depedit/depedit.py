@@ -22,7 +22,7 @@ from glob import glob
 import io
 from six import iteritems, iterkeys
 
-__version__ = "3.2.1.0"
+__version__ = "3.3.0.0"
 
 ALIASES = {"form":"text","upostag":"pos","xpostag":"cpos","feats":"morph","deprel":"func","deps":"head2","misc":"func2",
            "xpos": "cpos","upos":"pos"}
@@ -40,7 +40,7 @@ def escape(string, symbol_to_mask, border_marker):
 
 
 class ParsedToken:
-    __slots__ = ['id', 'text', 'lemma', 'pos', 'cpos', 'morph', 'head', 'func', 'edep', 'head2', 'func2', 'storage', 'storage2', 'num', 'child_funcs', 'position', 'is_super_tok', 'sentence']
+    __slots__ = ['id', 'text', 'lemma', 'pos', 'cpos', 'morph', 'head', 'func', 'edep', 'head2', 'func2', 'storage', 'storage2', 'storage3', 'num', 'child_funcs', 'position', 'is_super_tok', 'sentence']
 
     def __init__(self, tok_id, text, lemma, pos, cpos, morph, head, func, head2, func2, num, child_funcs, position, is_super_tok=False, tokoffset=0):
         self.id = tok_id
@@ -58,13 +58,14 @@ class ParsedToken:
             try:
                 edeps = head2.split("|")
                 for edep in edeps:
-                    h, d = edep.split(":", maxsplit=1)
+                    h, d = edep.split(":", 1)
                     h = str(float(h) + tokoffset)
                     self.edep.append([h, d])
             except ValueError:
                 pass
-        self.storage = ""  # Storage field for temporary values, never read or written to/from conllu
-        self.storage2 = ""  # Storage field for temporary values, never read or written to/from conllu
+        self.storage = ""  # Storage field2 for temporary values, never read or written to/from conllu
+        self.storage2 = ""
+        self.storage3 = ""
         self.num = num
         self.child_funcs = child_funcs
         self.position = position
@@ -77,6 +78,8 @@ class ParsedToken:
                 return self.sentence.annotations[key]
             elif key in self.sentence.input_annotations:
                 return self.sentence.input_annotations[key]
+            elif key == "docname":
+                return self.sentence.docname
             else:
                 return ""
 
@@ -85,9 +88,9 @@ class ParsedToken:
 
 
 class Sentence:
-    __slots__ = ['sentence_string','length','annotations','input_annotations','sent_num','offset','depedit']
+    __slots__ = ['sentence_string','length','annotations','input_annotations','sent_num','offset','depedit','docname']
 
-    def __init__(self, sentence_string="", sent_num=0, tokoffset=0, depedit_object=None):
+    def __init__(self, sentence_string="", sent_num=0, tokoffset=0, depedit_object=None, docname=""):
         self.sentence_string = sentence_string
         self.length = 0
         self.annotations = {}  # Dictionary to keep sentence annotations added by DepEdit rules
@@ -95,6 +98,7 @@ class Sentence:
         self.sent_num = sent_num
         self.offset = tokoffset
         self.depedit = depedit_object
+        self.docname = docname
 
     def print_annos(self):
         anno_dict = dict((k, v) for k, v in iteritems(self.annotations))
@@ -118,7 +122,7 @@ class Sentence:
         others = [k for k in sorted_keys if not k.startswith("meta::") and not k.startswith("global.") and k != "text"]
         text = ["text"] if "text" in sorted_keys else []
         sorted_keys = newdoc_anno + global_specs + meta + sent_id + sorted(others) + text
-        return ["# " + key.strip() + " = " + anno_dict[key].strip() for key in sorted_keys]
+        return ["# " + key.strip() + " = " + anno_dict[key].strip() if len(anno_dict[key].strip())>0 else "# " + key.strip() for key in sorted_keys]
 
 
 class Transformation:
@@ -128,7 +132,7 @@ class Transformation:
         if len(split_trans) < 3:
             return None
         definition_string, relation_string, action_string = split_trans
-        if "~#" in action_string and "edep=" not in action_string:
+        if "~#" in action_string and "edep=" not in action_string and "edep+=" not in action_string:
             sys.stderr.write("WARN: action specifies enhanced edge (~) but no edep label on line " + str(line) + "\n")
         elif "~#" not in action_string and "edep=" in action_string and not action_string.endswith("edep=") and \
                 not "edep=;" in action_string and not "ehead=" in action_string:
@@ -141,6 +145,8 @@ class Transformation:
                 sys.stderr.write("! Definition contains undefined variable: {" + m + "}")
                 quit()
         relation_string = self.normalize_shorthand(relation_string)
+        for source, target in iteritems(ALIASES):
+            relation_string = relation_string.replace(":"+source,":"+target)
         action_string = self.normalize_shorthand(action_string)
         definition_string = escape(definition_string, ";", "/")
         definitions_list = definition_string.split(";")
@@ -194,7 +200,7 @@ class Transformation:
             node = escape(definition.def_text, "&", "/")
             criteria = (_crit.replace("%%%%%", "&") for _crit in node.split("&"))
             for criterion in criteria:
-                if re.match(r"(text|pos|cpos|lemma|morph|storage2?|edom|func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)!?=/[^/=]*/", criterion) is None:
+                if re.match(r"(text|pos|cpos|lemma|morph|storage[23]?|edom|func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)!?=/[^/=]*/", criterion) is None:
                     if re.match(r"position!?=/(first|last|mid)/", criterion) is None:
                         if re.match(r"#S:[A-Za-z_]+!?=/[^/\t]+/",criterion) is None:
                             report += "Invalid node definition in column 1: " + criterion
@@ -208,23 +214,26 @@ class Transformation:
                 criteria = relation.split(";")
                 for criterion in criteria:
                     criterion = criterion.strip()
-                    if not re.match(r"(#[0-9]+(([>~]|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+|#[0-9]+:(text|pos|cpos|lemma|morph|storage2?|edom|"
+                    if not re.match(r"(#[0-9]+(([>~]|\.([0-9]+(,[0-9]+)?)?)#[0-9]+)+|#[0-9]+:(text|pos|cpos|lemma|morph|storage[23]?|edom|"
                                     r"func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)==#[0-9]+)",
                                     criterion):
                         report += "Column 2 relation setting invalid criterion: " + criterion + "."
         for action in self.actions:
             commands = action.split(";")
             for command in commands:  # Node action
-                if re.match(r"(#[0-9]+([>~]|><)#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|storage2?|edom|head|head2|func2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)[\+-]?=[^;]*)$", command) is None:
+                if re.match(r"(#[0-9]+([>~]|><)#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|storage[23]?|edom|head|head2|func2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead|split)[\+-]?=[^;]*)$", command) is None:
                     if re.match(r"#S:[A-Za-z_]+=[A-Za-z_]+$|last$|once$", command) is None:  # Sentence annotation action or quit
                         report += "Column 3 invalid action definition: " + command + " and the action was " + action
                         if "#" not in action:
                             report += " (no node declaration with #)"
+                if "split=" in action and "|" not in action:
+                    report += "Split action specified but no split points marked with | in command: " + command + " in action " + action
+
         return report
 
 
 class DefinitionMatcher:
-    __slots__ = ['def_text','def_index','groups','defs','sent_def']
+    __slots__ = ['def_text','def_index','groups','defs','sent_def','priority']
 
     def __init__(self, def_text, def_index):
         self.def_text = escape(def_text, "&", "/")
@@ -232,6 +241,7 @@ class DefinitionMatcher:
         self.groups = []
         self.defs = []
         self.sent_def = False
+        self.priority = 5  # Minimum priority
         if def_text.startswith("#S:"):
             self.sent_def = True
 
@@ -252,7 +262,10 @@ class DefinitionMatcher:
                 def_value += "$"
             if "^(?i)" in def_value:
                 def_value = def_value.replace("^(?i)","(?i)^")  # ensure case insensitive flag is initial
-            self.defs.append(Definition(criterion, def_value, negative_criterion))
+            definition = Definition(criterion, def_value, negative_criterion)
+            self.defs.append(definition)
+            if definition.selectivity < self.priority:
+                self.priority = definition.selectivity
 
     def __repr__(self):
         return "#" + str(self.def_index) + ": " + self.def_text
@@ -287,7 +300,7 @@ class DefinitionMatcher:
 
 
 class Definition:
-    __slots__ = ['value','match_type','compiled_re','match_func','negative','criterion']
+    __slots__ = ['value','match_type','selectivity','compiled_re','match_func','negative','criterion']
 
     def __init__(self, criterion, value, negative=False):
         # Handle conllu criterion aliases:
@@ -300,24 +313,35 @@ class Definition:
         self.compiled_re = None
         self.match_func = None
         self.negative = negative
+        self.selectivity = 0
         self.set_match_type(criterion)
 
     def set_match_type(self, criterion):
         value = self.value[1:-1]
         if self.value == "^.*$" and not self.negative:
             self.match_func = self.return_true
+            self.match_type = "return_true"
+            self.selectivity = 5  # Minimum selectivity
         elif re.escape(value) == value:  # No regex operators within expression
             if criterion in ["edep","edom"]:
                 self.match_func = self.return_not_in if self.negative else self.return_in
+                self.match_type = "return_not_in" if self.negative else "return_in"
+                self.selectivity = 2
             else:
                 self.match_func = self.return_exact_negative if self.negative else self.return_exact
+                self.match_type = "return_exact_negative" if self.negative else "return_exact"
+                self.selectivity = 1
             self.value = value
         else:  # regex
             self.compiled_re = re.compile(self.value)
             if criterion in ["edep","edom"]:
                 self.match_func = self.return_regex_not_in if self.negative else self.return_regex_in
+                self.match_type = "return_regex_not_in" if self.negative else "return_regex_in"
+                self.selectivity = 4
             else:
                 self.match_func = self.return_regex_negative if self.negative else self.return_regex
+                self.match_type = "return_regex_negative" if self.negative else "return_regex"
+                self.selectivity = 3
 
     @staticmethod
     def return_exact(definition, test_val):
@@ -432,6 +456,7 @@ class DepEdit:
             sys.exit()
 
     def process_sentence(self, conll_tokens, stepwise=False):
+        retval = 0
         for i, transformation in enumerate(self.transformations):
             if stepwise:
                 if sys.version_info[0] < 3:
@@ -440,31 +465,48 @@ class DepEdit:
                     print("# Rule " + str(i+1) + ": " + str(transformation)+'\n',end="")
 
             node_matches = defaultdict(list)
-            for def_matcher in transformation.definitions:
+            for def_matcher in sorted(transformation.definitions,key=lambda x: x.priority):
+                found = False
                 for token in conll_tokens:
                     if not token.is_super_tok and def_matcher.match(token):
+                        found = True
                         if def_matcher.sent_def:
                             if len(node_matches[def_matcher.def_index])==0:  # Only add a sentence anno definition once
                                 node_matches[def_matcher.def_index] = [Match(def_matcher.def_index, token, def_matcher.groups)]
                                 node_matches[def_matcher.def_index][0].sent_def = True
                         else:
                             node_matches[def_matcher.def_index].append(Match(def_matcher.def_index, token, def_matcher.groups))
+                if not found:
+                    break  # Some required node has no matches, stop processing this rule
+            if len(node_matches) == 0:
+                continue  # No mode matches for this rule, continue to next rule
             result_sets = []
             for relation in transformation.relations:
                 if not self.matches_relation(node_matches, relation, result_sets):
                     result_sets = []
             result_sets = self.merge_sets(result_sets, len(transformation.definitions), len(transformation.relations))
+            unique_results = []
+            for r in result_sets:
+                if r not in unique_results:
+                    unique_results.append(r)
+            result_sets = unique_results
             self.add_groups(result_sets)
             if len(result_sets) > 0:
                 for action in transformation.actions:
-                    if "><" not in action:
-                        retval = self.execute_action(result_sets, action, transformation)
-                    else:
+                    if "><" in action:
                         retval = self.execute_supertoken(result_sets, action, transformation, conll_tokens)
+                    elif "split=" in action:
+                        retval += self.execute_split(result_sets, action, transformation, conll_tokens)
+                    else:
+                        retval = self.execute_action(result_sets, action, transformation)
                     if retval == "last":  # Explicit instruction to cease processing
-                        return
+                        return 0
             if stepwise:
                 print("\n".join(self.serialize_output_tree(conll_tokens, 0))+"\n")
+        if isinstance(retval, int):
+            return retval
+        else:
+            return 0
 
     def matches_relation(self, node_matches, relation, result_sets):
         if len(relation) == 0:
@@ -774,6 +816,64 @@ class DepEdit:
             supertok = ParsedToken(super_id, super_text, "_", "_", "_", "_", "_", "_", "_", misc, super_id, [], "", is_super_tok=True)
             conll_tokens.insert(begin_idx, supertok)
 
+        return 0
+
+    def execute_split(self, result_sets, action_list, transformation, conll_tokens):
+        def add_misc(key_val, old_misc):
+            annos = old_misc.split("|") if old_misc != "_" else []
+            key = key_val.split("=")[0]
+            annos = [a for a in annos if not a.startswith(key + "=")]
+            annos.append(key_val)
+            return "|".join(sorted(list(set(annos))))
+
+        split_offset = 0
+        for res in result_sets:
+            # Prepare subtoken list for insertion
+            subtoks = action_list.split("split=")[1].split("|")
+            no_space_after = "SpaceAfter=No" in res[1].func2
+            idx = conll_tokens.index(res[1])
+            prev_id = float(res[1].id)
+            prev_num = int(float(res[1].num))
+
+            # Push up all tokens after insertion point by len(subtoks)-1
+            split_offset += len(subtoks)-1
+            for tok in conll_tokens:
+                float(tok.id)
+                if tok.is_super_tok:
+                    start, end = tok.id.split("-")
+                    start = float(start)
+                    end = float(end)
+                    if start > float(res[1].num):
+                        start += len(subtoks)-1
+                    if end > float(res[1].num):
+                        end += len(subtoks) - 1
+                    tok.id = tok.num = str(int(start)) + "-" + str(int(end))
+                else:
+                    if float(tok.id) > float(res[1].id):
+                        tok.num = str(float(tok.num)+len(subtoks)-1)
+                        tok.id = str(float(tok.id)+len(subtoks)-1)
+                    if float(tok.head) > float(res[1].id):
+                        tok.head = str(float(tok.head)+len(subtoks)-1)
+
+            # Update first token and insert subsequent ones
+            for i, subtok in enumerate(subtoks):
+                if subtok.startswith("$"):  # subtoken from capturing group in original token being split
+                    group_num = int(subtok[1:]) - 1
+                    subtok = res["groups"][group_num]
+                if i ==0:  # First token, overwrite original token
+                    res[1].text = subtok
+                    res[1].func2 = add_misc("SpaceAfter=No", res[1].func2)
+                else:  # Subsequent new tokens
+                    idx += 1
+                    prev_id += 1
+                    prev_num += 1
+                    new_token = ParsedToken(str(prev_id), subtok, "_", "_", "_", "_", res[1].id, "dep", "_", "_", str(prev_num), [], "")
+                    conll_tokens.insert(idx, new_token)
+                    if i < len(subtoks) -1 or no_space_after:
+                        new_token.func2 = add_misc("SpaceAfter=No", new_token.func2)
+
+        return split_offset
+
     def execute_action(self, result_sets, action_list, transformation):
         actions = action_list.split(";")
         for result in result_sets:
@@ -787,7 +887,10 @@ class DepEdit:
                         if action.startswith("#S:"):  # Sentence annotation instruction
                             key_val = action.split(":")[1]
                             key, val = key_val.split("=", 1)
-                            result[1].sentence.annotations[key] = val
+                            if key == "docname":
+                                result[1].sentence.docname = val
+                            else:
+                                result[1].sentence.annotations[key] = val
                         else:  # node instruction
                             node_position = int(action[1:action.find(":")])
                             if not self.quiet:
@@ -838,7 +941,7 @@ class DepEdit:
                                 old_val = getattr(result[node_position],prop)
                                 new_vals = sorted(value.split("|"))
                                 new_vals_keys = [v.split("=")[0] for v in new_vals]
-                                if old_val != "_":  # Some values already exist
+                                if old_val != "_" and isinstance(old_val,str):  # Some values already exist
                                     kv = []
                                     for ov in sorted(old_val.split("|")):
                                         if not ov.split("=")[0] in new_vals_keys:  # Else this needs to be overwritten
@@ -873,7 +976,17 @@ class DepEdit:
                                     try:
                                         index = [i for i, dep in enumerate(result[node_position].edep) if dep[-1] is None][0]
                                     except IndexError:  # All are filled, overwrite top of stack
-                                        index = -1
+                                        if add_val:  # += instruction for edep means add without overwriting
+                                            continue  # An edge already exists between these nodes and the op is +=, skip this action
+                                        else:
+                                            index = -1
+                                    if add_val:
+                                        test_parent = result[node_position].edep[index][0]
+                                        if any([x[0]==test_parent and x[1] is not None and not (x[0] == result[node_position].head and x[1] == result[node_position].func) for x in result[node_position].edep]):
+                                            # A distinct edep, non-None edge already exists lower than a None labeled edge
+                                            # and the op is +=, skip this action and remove the None edge
+                                            result[node_position].edep = [x for x in result[node_position].edep if x[1] is not None]
+                                            continue
                                     result[node_position].edep[index][1] = value
                                     # Remove all other edeps connecting the same two tokens
                                     this_edep_parent = result[node_position].edep[index][0]
@@ -881,7 +994,7 @@ class DepEdit:
                                     result[node_position].head2 = "_"  # Remove any explicit head2 info to accommodate new edeps; it will be generated from edom
                             elif prop == "edom":
                                 if "||" in value:
-                                    h, rel = value.split("||", maxsplit=1)
+                                    h, rel = value.split("||", 1)
                                     new_rels = []
                                     for dom in result[node_position].edep:
                                         if dom[0] != h:  # Leave out any existing edeps with the same head unless they are substrings
@@ -969,7 +1082,7 @@ class DepEdit:
             # sort by len, meaning we prefer longer edeps for duplicates with same ehead
             for p in sorted(parts,key=lambda x: len(x)):
                 if ":" in p:
-                    eh, ed = p.split(":",maxsplit=1)
+                    eh, ed = p.split(":",1)
                     d[eh] = ed
                 else:  # Non-UD edeps field, warn and return naive sort
                     sys.stderr.write("WARN: Non-standard value in column 9: enhanced dependencies should contain ':'\n")
@@ -1064,13 +1177,13 @@ class DepEdit:
         tokoffset = supertok_offset = sentlength = supertok_length = 0
         output_lines = []
         sentence_lines = []
-        current_sentence = Sentence(sent_num=1, depedit_object=self)
+        current_sentence = Sentence(sent_num=1, depedit_object=self, docname=filename)
 
         def _process_sentence(stepwise=False, enhanced=False):
             current_sentence.length = sentlength
             conll_tokens[-1].position = "last"
             sentence_tokens = conll_tokens[tokoffset + supertok_offset + 1:]
-            self.process_sentence(sentence_tokens,stepwise=stepwise)
+            insertion_offset = self.process_sentence(sentence_tokens,stepwise=stepwise)
             if sent_id:
                 #output_lines.append(self.make_sent_id(current_sentence.sent_num))
                 current_sentence.annotations["sent_id"] = self.make_sent_id(current_sentence.sent_num)
@@ -1092,11 +1205,11 @@ class DepEdit:
                 sentence_lines = []
                 tokoffset += sentlength
                 supertok_offset += supertok_length
-                current_sentence = Sentence(sent_num=current_sentence.sent_num + 1,tokoffset=tokoffset, depedit_object=self)
+                current_sentence = Sentence(sent_num=current_sentence.sent_num + 1,tokoffset=tokoffset, depedit_object=self, docname=filename)
                 sentlength = supertok_length = 0
             if myline.startswith("#"):  # Preserve comment lines unless kill requested
                 if self.kill not in ["comments", "both"] and "=" not in myline:
-                    output_lines.append(myline.strip())
+                    current_sentence.input_annotations[myline[1:].strip()] = ""
                 if "=" in myline:
                     key, val = myline[1:].split("=",1)
                     current_sentence.input_annotations[key.strip()] = val.strip()
@@ -1170,6 +1283,7 @@ def main():
                         help="Remove supertokens or commments from output")
     parser.add_argument('-q', '--quiet', action="store_true", dest="quiet", help="Do not output warnings and messages")
     parser.add_argument('--stepwise', action="store_true", help="Output sentence repeatedly after each step (useful for debugging)")
+    parser.add_argument('--time', action="store_true", help="Print time taken to process file(s)")
     group = parser.add_argument_group('Batch mode options')
     group.add_argument('-o', '--outdir', action="store", dest="outdir", default="",
                        help="Output directory in batch mode")
@@ -1230,4 +1344,11 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--time" in sys.argv:
+        import time
+        start_time = time.time()
+
     main()
+
+    if "--time" in sys.argv:
+        sys.stderr.write("--- %s seconds ---" % (time.time() - start_time))
