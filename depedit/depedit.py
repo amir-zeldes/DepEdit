@@ -22,7 +22,7 @@ from glob import glob
 import io
 from six import iteritems, iterkeys
 
-__version__ = "3.3.0.0"
+__version__ = "3.3.1.0"
 
 ALIASES = {"form":"text","upostag":"pos","xpostag":"cpos","feats":"morph","deprel":"func","deps":"head2","misc":"func2",
            "xpos": "cpos","upos":"pos"}
@@ -85,6 +85,9 @@ class ParsedToken:
 
     def __repr__(self):
         return str(self.text) + " (" + str(self.pos) + "/" + str(self.lemma) + ") " + "<-" + str(self.func)
+
+    def __deepcopy__(self, memo):
+        return self
 
 
 class Sentence:
@@ -394,6 +397,19 @@ class Match:
 
     def __repr__(self):
         return "#" + str(self.def_index) + ": " + str(self.token)
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        # Return a deep copy of the object without copying the object reference
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k in self.__slots__:
+            v = self.__getattribute__(k)
+            setattr(result, k, deepcopy(v, memo))
+        return result
 
 
 class DepEdit:
@@ -732,7 +748,7 @@ class DepEdit:
             return False
 
     @staticmethod
-    def merge_bins(bin1, bin2):
+    def merge_bins(bin1, bin2_orig):
         """
         Merge bins we know are compatible, e.g. bin1 has #1+#2 and bin2 has #2+#3
 
@@ -740,6 +756,7 @@ class DepEdit:
         :param bin2: a bin dictionary mapping indices to tokens, a list of relations 'rels' and matcher objects 'matchers'
         :return: the merged bin with data from both input bins
         """
+        bin2 = deepcopy(bin2_orig)
         for matcher in bin1["matchers"]:
             skip = False
             for matcher2 in bin2["matchers"]:
