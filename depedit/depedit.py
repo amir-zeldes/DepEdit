@@ -22,7 +22,7 @@ from glob import glob
 import io
 from six import iteritems, iterkeys
 
-__version__ = "3.3.1.0"
+__version__ = "3.4.0.0"
 
 ALIASES = {"form":"text","upostag":"pos","xpostag":"cpos","feats":"morph","deprel":"func","deps":"head2","misc":"func2",
            "xpos": "cpos","upos":"pos"}
@@ -172,6 +172,7 @@ class Transformation:
             orig_action = orig_action.replace(":" + source + "=", ":" + target + "=")
             orig_action = orig_action.replace(":" + source + "+=", ":" + target + "+=")
             orig_action = orig_action.replace(":" + source + "-=", ":" + target + "-=")
+            orig_action = orig_action.replace(":" + source + ",=", ":" + target + ",=")
         return orig_action
 
     @staticmethod
@@ -203,6 +204,7 @@ class Transformation:
             node = escape(definition.def_text, "&", "/")
             criteria = (_crit.replace("%%%%%", "&") for _crit in node.split("&"))
             for criterion in criteria:
+                criterion = escape(criterion, "=", "/")
                 if re.match(r"(text|pos|cpos|lemma|morph|storage[23]?|edom|func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)!?=/[^/=]*/", criterion) is None:
                     if re.match(r"position!?=/(first|last|mid)/", criterion) is None:
                         if re.match(r"#S:[A-Za-z_]+!?=/[^/\t]+/",criterion) is None:
@@ -224,7 +226,7 @@ class Transformation:
         for action in self.actions:
             commands = action.split(";")
             for command in commands:  # Node action
-                if re.match(r"(#[0-9]+([>~]|><)#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|storage[23]?|edom|head|head2|func2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead|split)[\+-]?=[^;]*)$", command) is None:
+                if re.match(r"(#[0-9]+([>~]|><)#[0-9]+|#[0-9]+:(func|lemma|text|pos|cpos|morph|storage[23]?|edom|head|head2|func2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead|split)[\+,-]?=[^;]*)$", command) is None:
                     if re.match(r"#S:[A-Za-z_]+=[A-Za-z_]+$|last$|once$", command) is None:  # Sentence annotation action or quit
                         report += "Column 3 invalid action definition: " + command + " and the action was " + action
                         if "#" not in action:
@@ -920,11 +922,15 @@ class DepEdit:
                             value = action[action.find("=") + 1:].strip()
                             add_val = False
                             subtract_val = False
+                            concat_val = False
                             if prop.endswith("+"):  # Add annotation, e.g. feats+=...
                                 add_val = True
                                 prop = prop[:-1]
                             elif prop.endswith("-"):  # Remove annotation, e.g. feats-=...
                                 subtract_val = True
+                                prop = prop[:-1]
+                            elif prop.endswith(","):  # Add to existing values, separated by , and alphabetized, e.g. Cxn=X,Y,Z
+                                concat_val = True
                                 prop = prop[:-1]
                             group_num_matches = re.findall(r"(\$[0-9]+[LU]?)", value)
                             if group_num_matches is not None:
@@ -981,6 +987,25 @@ class DepEdit:
                                         value = "_"
                                 else:
                                     value = "_"
+                            elif concat_val:
+                                old_val = getattr(result[node_position],prop)
+                                new_vals = sorted(value.split("|"))
+                                new_vals_keys = defaultdict(set)
+                                for pair in new_vals:
+                                    this_key, this_val = pair.split("=")
+                                    new_vals_keys[this_key].add(this_val)
+                                if old_val != "_" and isinstance(old_val,str):  # Some values already exist
+                                    kv = []
+                                    for ov in sorted(old_val.split("|")):
+                                        this_key, this_val = ov.split("=")
+                                        if this_key not in new_vals_keys:  # Else this needs to be overwritten
+                                            kv.append(ov)
+                                        else:
+                                            kv.append(this_key + "=" + ",".join(sorted(list(new_vals_keys[this_key].union(set(this_val.split(",")))))))
+                                    value = "|".join(sorted(kv,key=lambda x:x.lower()))
+                                else:
+                                    value = "|".join(new_vals)
+
                             if prop == "edep":
                                 if value == "":  # Set empty edep
                                     result[node_position].edep = []
