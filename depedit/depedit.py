@@ -22,7 +22,7 @@ from glob import glob
 import io
 from six import iteritems, iterkeys
 
-__version__ = "3.4.0.1"
+__version__ = "4.0.0.0"
 
 ALIASES = {"form":"text","upostag":"pos","xpostag":"cpos","feats":"morph","deprel":"func","deps":"head2","misc":"func2",
            "xpos": "cpos","upos":"pos"}
@@ -37,6 +37,61 @@ def escape(string, symbol_to_mask, border_marker):
             inside = not inside
         output += "%%%%%" if char == symbol_to_mask and inside else char
     return output
+
+
+class Entity:
+    __slots__ = ['cluster','annos','tokens','sentence']
+
+    def __init__(self, cluster):
+        self.cluster = cluster
+        self.annos = {}
+        self.tokens = []
+
+    def __getattr__(self, item):
+        if item in self.annos:
+            return self.annos[item]
+        else:
+            if item == "text":
+                return " ".join([t.text for t in self.tokens])
+            elif item == "rawtext":
+                output = ""
+                for t in self.tokens:
+                    output += t.text
+                    if "SpaceAfter=No" not in t.func2:
+                        output += " "
+                return output.strip()
+            elif item == "start":
+                return self.tokens[0].id if len(self.tokens) > 0 else "s"
+            elif item == "end":
+                return self.tokens[-1].id if len(self.tokens) > 0 else "e"
+            elif item == "length":
+                return len(self.tokens)
+            elif item in self.annos:
+                return self.annos[item]
+            elif item == "sentence":
+                return self.tokens[0].sentence
+            elif item == "head":
+                if len(self.tokens) > 0:
+                    head = self.tokens[0]
+                    for tok in self.tokens:
+                        if tok.func != "punct":
+                            if tok.func == "root":
+                                head = tok
+                                break
+                            if tok.head < self.start or tok.head > self.end:
+                                head = tok
+                                break
+                    return head
+                else:
+                    return None
+            else:
+                raise AttributeError
+
+    def __len__(self):
+        return len(self.tokens)
+
+    def __repr__(self):
+        return self.text + " (" + str(self.start) + "-" + str(self.end) + ")"
 
 
 class ParsedToken:
@@ -91,7 +146,7 @@ class ParsedToken:
 
 
 class Sentence:
-    __slots__ = ['sentence_string','length','annotations','input_annotations','sent_num','offset','depedit','docname']
+    __slots__ = ['sentence_string','length','annotations','input_annotations','sent_num','offset','depedit','docname','mentions','tokens']
 
     def __init__(self, sentence_string="", sent_num=0, tokoffset=0, depedit_object=None, docname=""):
         self.sentence_string = sentence_string
@@ -102,6 +157,8 @@ class Sentence:
         self.offset = tokoffset
         self.depedit = depedit_object
         self.docname = docname
+        self.mentions = []
+        self.tokens = []
 
     def print_annos(self):
         anno_dict = dict((k, v) for k, v in iteritems(self.annotations))
@@ -417,6 +474,8 @@ class Match:
 class DepEdit:
 
     def __init__(self, config_file="", options=None):
+        self.mentions = []
+        self.entities = defaultdict(list)
         self.variables = {}
         self.transformations = []
         self.user_transformation_counter = 0
@@ -431,6 +490,7 @@ class DepEdit:
         if config_file != "":
             self.read_config_file(config_file)
         self.docname = self.input_mode = None
+        self.ent_annos = []
 
     def read_config_file(self, config_file, clear_transformations=False):
         """
@@ -1001,7 +1061,10 @@ class DepEdit:
                                         if this_key not in new_vals_keys:  # Else this needs to be overwritten
                                             kv.append(ov)
                                         else:
-                                            kv.append(this_key + "=" + ",".join(sorted(list(new_vals_keys[this_key].union(set(this_val.split(",")))))))
+                                            new_vals_keys[this_key].update(set(this_val.split(",")))
+                                    if len(new_vals_keys) > 0:
+                                        for this_key in new_vals_keys:
+                                            kv.append(this_key + "=" + ",".join(sorted(new_vals_keys[this_key])))
                                     value = "|".join(sorted(kv,key=lambda x:x.lower()))
                                 else:
                                     value = "|".join(new_vals)
@@ -1209,17 +1272,23 @@ class DepEdit:
                 toks.append(word)
         return "".join(toks)
 
-    def run_depedit(self, infile, filename="file", sent_id=False, docname=False, stepwise=False, enhanced=False, sent_text=False):
+    def run_depedit(self, infile, filename="file", sent_id=False, docname=False, stepwise=False, enhanced=False, sent_text=False, parse_entities=False):
 
         children = defaultdict(list)
         child_funcs = defaultdict(list)
         conll_tokens = [0]
         self.input_mode = "10col"
         self.docname = filename
+        self.mentions = []
+        self.sentences = []
+        self.entities = defaultdict(list)
         tokoffset = supertok_offset = sentlength = supertok_length = 0
         output_lines = []
         sentence_lines = []
         current_sentence = Sentence(sent_num=1, depedit_object=self, docname=filename)
+        open_ents = defaultdict(list)
+        closed_ents = []
+        max_ent = 1
 
         def _process_sentence(stepwise=False, enhanced=False):
             current_sentence.length = sentlength
@@ -1233,6 +1302,7 @@ class DepEdit:
                 current_sentence.annotations["text"] = self.make_sent_text(sentence_tokens)
             transformed = current_sentence.print_annos() + self.serialize_output_tree(sentence_tokens, tokoffset, enhanced=enhanced)
             output_lines.extend(transformed)
+            self.sentences.append(current_sentence)
 
         # Check if DepEdit has been fed an unsplit string programmatically
         if isinstance(infile, str):
@@ -1250,6 +1320,8 @@ class DepEdit:
                 current_sentence = Sentence(sent_num=current_sentence.sent_num + 1,tokoffset=tokoffset, depedit_object=self, docname=filename)
                 sentlength = supertok_length = 0
             if myline.startswith("#"):  # Preserve comment lines unless kill requested
+                if parse_entities and myline.startswith("# global.Entity"):
+                    self.ent_annos = myline.split("=")[1].strip().split("-")
                 if self.kill not in ["comments", "both"] and "=" not in myline:
                     current_sentence.input_annotations[myline[1:].strip()] = ""
                 if "=" in myline:
@@ -1286,6 +1358,44 @@ class DepEdit:
                     this_tok.position = "first"
                 this_tok.sentence = current_sentence
                 conll_tokens.append(this_tok)
+                current_sentence.tokens.append(this_tok)
+                if parse_entities and len(cols) > 9:
+                    if "Entity=" in cols[9]:  # Parse out nested entity openers like Entity=(1-person(2-organization)
+                        ent_string = [x for x in cols[-1].split("|") if x.startswith("Entity=")][0].split("=")[1]
+                        openers = re.findall(r'\(([0-9]+[^()]+)', ent_string)
+                        for opener in openers:
+                            eid = opener.split("-")[0]
+                            anno_vals = opener.split("-")
+                            if len(anno_vals) > len(self.ent_annos):  # Create generic anno names a1, a2... for unlisted
+                                sys.stderr.write("DepEdit WARN: Entity annotation count mismatch in " + filename + ", check global.Entity\n")
+                                self.ent_annos = ["a" + str(i + 1) for i in range(len(anno_vals))]
+                            anno_dict = {self.ent_annos[i]: anno_vals[i] for i in range(len(anno_vals))}
+                            if "GRP" in anno_dict and "eid" not in anno_dict:
+                                anno_dict["eid"] = anno_dict["GRP"]
+                            if "eid" not in anno_dict:
+                                anno_dict["eid"] = max_ent
+                                max_ent += 1
+                            ent = Entity(str(anno_dict["eid"]))
+                            ent.annos = anno_dict
+                            open_ents[eid].append(ent)
+                        closers = re.findall(r'\(([0-9]+)-[^()]+\)', ent_string)
+                        closers += re.findall(r'(?<=[=)])([0-9]+)\)', "=" + ent_string)
+                    else:
+                        closers = []
+
+                    # Create Entity object per opened entity
+                    for opener in open_ents:
+                        for e in open_ents[opener]:
+                            e.tokens.append(this_tok)
+
+                    # Move all closing entities to closed entities list
+                    for closer in closers:
+                        ent = open_ents[closer].pop()
+                        closed_ents.append(ent)
+                        self.mentions.append(ent)
+                        self.entities[ent.annos["eid"]].append(ent)
+                        current_sentence.mentions.append(ent)
+
                 if super_tok:
                     supertok_length += 1
                 else:
@@ -1333,6 +1443,7 @@ def main():
                        help="Extension for output files in batch mode")
     group.add_argument('-i', '--infix', action="store", dest="infix", default=".depedit",
                        help="Infix to denote edited files in batch mode (default: .depedit)")
+    parser.add_argument('--entities', action="store_true", help="Parse entity annotations in input")
     parser.add_argument('--version', action='version', version=depedit_version)
     options = parser.parse_args()
 
@@ -1356,7 +1467,8 @@ def main():
         basename = os.path.basename(filename)
         docname = basename[:basename.rfind(".")] if options.docname or options.sent_id else filename
         output_trees = depedit.run_depedit(infile, docname, sent_id=options.sent_id, docname=options.docname,
-                                           stepwise=options.stepwise, enhanced=options.enhanced, sent_text=options.text)
+                                           stepwise=options.stepwise, enhanced=options.enhanced, sent_text=options.text,
+                                           parse_entities=options.entities)
         if len(files) == 1:
             # Single file being processed, just print to STDOUT
             if sys.version_info[0] < 3:
