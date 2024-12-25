@@ -1021,7 +1021,13 @@ class DepEdit:
                                         group_str += "L"
                                     elif case == "upper":
                                         group_str += "U"
-                                    value = re.sub(r"\$" + group_str, group_value, value)
+                                    if group_value is None:
+                                        msg = "! Attempted to insert value from a capturing group that matches nothing in the input, triggered by this transformation:\n\n"
+                                        msg += transformation.transformation_text + "\n\n"
+                                        msg += "The capturing group is $" + group_str + " in the action '" + action + "'.\n"
+                                        raise ValueError(msg)
+                                    else:
+                                        value = re.sub(r"\$" + group_str, group_value, value)
                             if add_val:
                                 old_val = getattr(result[node_position],prop)
                                 new_vals = sorted(value.split("|"))
