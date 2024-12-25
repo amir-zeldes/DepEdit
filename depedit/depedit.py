@@ -262,9 +262,11 @@ class Transformation:
             criteria = (_crit.replace("%%%%%", "&") for _crit in node.split("&"))
             for criterion in criteria:
                 criterion = escape(criterion, "=", "/")
-                if re.match(r"(text|pos|cpos|lemma|morph|storage[23]?|edom|func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)!?=/[^/=]*/", criterion) is None:
+                if re.match(r"(text|pos|cpos|lemma|morph|storage[23]?|edom|func|head|func2|head2|num|form|upos|upostag|xpos|xpostag|feats|deprel|deps|misc|edep|ehead)!?=/[^/=]*/$", criterion) is None:
                     if re.match(r"position!?=/(first|last|mid)/", criterion) is None:
                         if re.match(r"#S:[A-Za-z_]+!?=/[^/\t]+/",criterion) is None:
+                            if criterion.endswith("/i") and criterion.count("/") > 1:
+                                criterion += " - it looks like you are trying to use a flag like 'i' to ignore case - if so, please use the (?i) flag at the start of your regex instead"
                             report += "Invalid node definition in column 1: " + criterion
         for relation in self.relations:
             if relation == "none" and len(self.relations) == 1:
